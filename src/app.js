@@ -1,0 +1,312 @@
+import { STORAGE_KEY, sampleState, validateImport, validSong, songToText, applyAction, activeSet, activeSong, activeSection, atStart, atEnd, chordSegments } from './model.js';
+import { LyricsPeer } from './sync.js';
+const $ = (query, root=document) => root.querySelector(query);
+const escape = value => String(value ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const icon = (name, size=20) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${({
+  music:'<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  monitor:'<rect x="2.5" y="3" width="19" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/>',
+  stage:'<path d="M4 19V5h16v14M2 19h20M8 5v14M16 5v14"/>',
+  controls:'<path d="M4 21v-7m0-4V3m8 18v-9m0-4V3m8 18v-5m0-4V3M1 14h6m2-6h6m2 8h6"/>',
+  left:'<path d="m15 18-6-6 6-6"/>', right:'<path d="m9 18 6-6-6-6"/>',
+  blank:'<rect x="2.5" y="4" width="19" height="15" rx="2"/><path d="m5 6 14 11"/>',
+  show:'<rect x="2.5" y="4" width="19" height="15" rx="2"/><path d="M8 11h8"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>', minus:'<path d="M5 12h14"/>',
+  settings:'<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2" fill="currentColor" stroke="none"/><circle cx="16" cy="17" r="2" fill="currentColor" stroke="none"/>',
+  link:'<path d="M10 13a5 5 0 0 0 7 .2l3-3a5 5 0 0 0-7-7l-1.8 1.8M14 11a5 5 0 0 0-7-.2l-3 3a5 5 0 0 0 7 7L12.8 19"/>',
+  edit:'<path d="m16 4 4 4M4 20l5-.8L20 8a3 3 0 0 0-4-4L5 15z"/>',
+  list:'<path d="M9 6h12M9 12h12M9 18h12M3 6h.01M3 12h.01M3 18h.01"/>',
+  chevronDown:'<path d="m6 9 6 6 6-6"/>',
+  check:'<path d="m5 12 5 5L20 7"/>',
+  close:'<path d="M18 6 6 18M6 6l12 12"/>',
+  upload:'<path d="M12 16V3m-5 5 5-5 5 5M4 17v4h16v-4"/>',
+  download:'<path d="M12 3v13m-5-5 5 5 5-5M4 18v3h16v-3"/>',
+  fullscreen:'<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>',
+  more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+  wifi:'<path d="M2 8c6-5 14-5 20 0M5 12c4-3 10-3 14 0M9 16c2-1.5 4-1.5 6 0"/><path d="M12 20h.01"/>',
+  lock:'<rect x="5" y="10" width="14" height="12" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+  circle:'<circle cx="12" cy="12" r="9"/>',
+  arrowUp:'<path d="M12 19V5m-6 6 6-6 6 6"/>',arrowDown:'<path d="M12 5v14m-6-6 6 6 6-6"/>',
+  trash:'<path d="M3 6h18M8 6V4h8v2m3 0-1 15H6L5 6m5 4v7m4-7v7"/>',
+  library:'<path d="M4 4v16M9 4v16M14 7v13m-1-13 3-.5 3 13.5"/>',
+  external:'<path d="M14 4h6v6m0-6-9 9M20 14v6H4V4h6"/>'
+})[name]||''}</svg>`;
+
+function loadSaved(){
+  try {
+    const raw=localStorage.getItem(STORAGE_KEY);
+    if(!raw)return sampleState();
+    const saved=JSON.parse(raw), clean=validateImport(saved);
+    clean.activeSetId=clean.sets.some(x=>x.id===saved.activeSetId)?saved.activeSetId:clean.sets[0].id;
+    const cursor=saved.cursor;
+    if(cursor && Number.isInteger(cursor.song)&&Number.isInteger(cursor.section)&&Number.isInteger(cursor.page))clean.cursor=cursor;
+    clean.blank=false;
+    return clean;
+  }catch(e){console.warn('Could not load library, using sample data',e);return sampleState();}
+}
+function persist(){if(app.isHost&&app.screen!=='demo'&&app.data){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(app.data));}catch(e){toast('Browser storage is full. Export a backup.');}}}
+function sessionCode(){const abc='ABCDEFGHJKLMNPQRSTUVWXYZ23456789',r=new Uint32Array(6);crypto.getRandomValues(r);return [...r].map(n=>abc[n%abc.length]).join('');}
+function sessionLink(view=''){const url=new URL(location.href);url.search='';url.hash='';url.searchParams.set('join',app.code);if(view)url.searchParams.set('view',view);return url.toString();}
+const params=new URLSearchParams(location.search);
+const app={
+  screen:'welcome',isHost:false,code:'',password:'',role:'control',authorized:false,
+  data:null,peer:null,status:'idle',peers:0,tab:'lyrics',editingSet:false,editor:null,
+  showInvite:false,showProjectorTools:false,showChords:true,font:1,projectorFont:2,follow:true,
+  scrollTop:0,programScroll:false,modal:'',message:'',pendingCode:(params.get('join')||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6),
+  pendingView:params.get('view')||'',connectLock:false
+};
+let toastTimer;
+function toast(message){app.message=message;renderToast();clearTimeout(toastTimer);toastTimer=setTimeout(()=>{app.message='';renderToast();},4000);}
+function renderToast(){const el=$('#toast-root');if(el)el.innerHTML=app.message?`<div class="toast" role="status">${escape(app.message)}</div>`:'';}
+function statusLabel(){return ({'connecting':'Connecting…','host-ready':'Hosting session','connected':'Synced','searching':'Finding host…','disconnected':'Disconnected','reconnecting':'Reconnecting…','error':'Connection error','idle':'Offline preview'})[app.status]||'Waiting…';}
+function indicator(){const ok=app.isHost?app.status==='host-ready':app.status==='connected';return `<span class="connection ${ok?'good':'warning'}"><span class="status-dot"></span><span>${escape(statusLabel())}</span></span>`;}
+function currentSong(){return activeSong(app.data);}
+function setName(){return activeSet(app.data)?.name||'Untitled set';}
+function canControl(){return app.isHost||app.authorized;}
+function dispatch(action){
+  if(!canControl()){toast('Controller password required.');return;}
+  if(!app.peer && app.screen!=='demo'){toast('Session not ready.');return;}
+  if(app.isHost || app.screen==='demo') {
+    try {
+      app.data=applyAction(app.data,action);persist();render();
+      app.peer?.sendSnapshot();
+    }catch(e){toast(e.message||'Could not update.');}
+  }else{
+    app.peer?.command(action);
+  }
+}
+async function startSession({host,code,password,role,name=''}){
+  if(app.connectLock)return;
+  app.connectLock=true;
+  app.isHost=host;app.code=code;app.password=password;app.role=role;
+  app.authorized=host;app.screen='session';app.status='connecting';app.tab='lyrics';
+  app.data=host?loadSaved():null;
+  if(host)app.data.sessionName=String(name||app.data.sessionName||'Worship Session').trim().slice(0,80);
+  app.showInvite=host;render();
+  const peer=new LyricsPeer({code,isHost:host,password:host?password:role==='control'?password:'',
+    onStatus:(value,detail)=>{app.status=value;if(detail)toast(detail);renderStatus();},
+    onState:snap=>{const prior=app.data?.cursor;app.data=snap;render();if(!prior||JSON.stringify(prior)!==JSON.stringify(snap.cursor))followLive();},
+    onCommand:action=>dispatch(action),
+    onAuth:ok=>{app.authorized=ok;if(!ok){app.modal='auth';toast('Incorrect controller password.');}else app.modal='';render();},
+    onPresence:n=>{app.peers=n;renderStatus();}
+  });
+  peer.getSnapshot=()=>app.data;
+  app.peer=peer;
+  try {await peer.start();}
+  catch(error){app.status='error';toast(error.message||'Could not connect.');if(!host)app.modal='connect-failed';render();}
+  finally{app.connectLock=false;}
+}
+async function leave(){
+  const peer=app.peer;app.peer=null;app.screen='welcome';app.status='idle';app.isHost=false;app.data=null;app.authorized=false;app.showInvite=false;app.modal='';app.editingSet=false;
+  render();await peer?.close();
+}
+function preview(){app.screen='demo';app.isHost=true;app.role='control';app.authorized=true;app.code='DEMO';app.status='idle';app.data=loadSaved();app.showInvite=false;render();}
+function jumpLocal(role){
+  if(role==='control'&&!canControl()){app.modal='auth';render();return;}
+  app.role=role;app.tab='lyrics';app.follow=true;app.scrollTop=0;render();followLive();
+}
+function renderStatus(){const el=$('#connection-slot');if(el)el.innerHTML=indicator();const c=$('#peer-count');if(c)c.textContent=`${app.peers} connected`;}
+function logo(){return `<span class="brand-mark">${icon('music',23)}</span><span class="brand-name">lyrics<span>live</span></span>`;}
+function welcome(){return `<div class="welcome-shell"><header class="welcome-top"><div class="brand">${logo()}</div><span class="welcome-top-note">Simple lyrics. Everyone in sync.</span></header><main class="welcome-main">
+   <div class="eyebrow"><span class="shine"></span> LIVE WORSHIP MADE SIMPLE</div>
+   <h1>All the words.<br><em>In the right place.</em></h1>
+   <p class="intro">One session for your projector, singers and musicians. Everyone follows together, straight from their browser.</p>
+   <div class="welcome-actions">
+    <div class="welcome-card primary-card"><span class="card-icon">${icon('plus',23)}</span><h2>Create a session</h2><p>Host from this computer, build your set and invite your team.</p><button class="btn primary wide" data-action="show-create">Create session ${icon('right',18)}</button></div>
+    <div class="welcome-card"><span class="card-icon secondary-icon">${icon('link',23)}</span><h2>Join a session</h2><p>Have a code? Get connected in a few seconds.</p><form id="join-form"><label for="join-code">SESSION CODE</label><div class="join-inline"><input id="join-code" name="code" class="code-input" placeholder="A7K92B" maxlength="6" autocomplete="off" autocapitalize="characters" value="${escape(app.pendingCode)}" required><button class="btn subtle" type="submit">Join ${icon('right',17)}</button></div></form></div>
+   </div><button class="demo-link" data-action="preview">Preview the interface with sample songs ${icon('right',15)}</button>
+   </main><footer class="welcome-footer"><span>${icon('monitor',16)} Works on projectors, tablets and phones</span><span>Browser-to-browser • No cloud song database</span></footer>
+  </div>`;}
+function createView(){return `<div class="welcome-shell"><header class="welcome-top"><div class="brand">${logo()}</div><button class="quiet-btn" data-action="home">${icon('left',16)} Back</button></header><main class="form-shell"><div class="eyebrow">NEW SESSION</div><h1 class="form-title">Let's get ready.</h1><p class="intro">This browser will host the session. Keep it awake while your team is using the lyrics.</p><form id="create-form" class="form-card">
+  <label for="create-name">SESSION NAME</label><input id="create-name" name="name" value="Sunday Worship" maxlength="80" required>
+  <label for="create-password">CONTROL PASSWORD</label><input id="create-password" name="password" type="password" minlength="6" maxlength="100" autocomplete="new-password" placeholder="At least 6 characters" required>
+  <p class="help">The password is for additional controllers. Stage and Projector don't need it.</p>
+  <div class="form-note">${icon('monitor',20)} <span>Projector-hosted mode — no server installation. Dedicated server mode is planned for V3.</span></div>
+  <button type="submit" class="btn primary wide large">Start session ${icon('right',18)}</button></form></main></div>`;}
+function joinView(){return `<div class="welcome-shell"><header class="welcome-top"><div class="brand">${logo()}</div><button class="quiet-btn" data-action="home">${icon('left',16)} Back</button></header><main class="form-shell"><div class="eyebrow">JOIN SESSION</div><h1 class="form-title">You're almost in.</h1><p class="intro">Choose the view for this device. Projector and Stage are open to everyone with the session code.</p><form id="join-role-form" class="form-card">
+   <label for="role-code">SESSION CODE</label><input id="role-code" class="code-input" name="code" value="${escape(app.pendingCode)}" maxlength="6" required autocapitalize="characters" autocomplete="off">
+   <label>YOUR VIEW</label><div class="role-picks">
+    ${[['projector','monitor','Projector','Lyrics only'],['stage','music','Stage','Lyrics + chords'],['control','controls','Control','Manage the slides']].map(([v,i,n,d])=>`<label class="role-pick"><input type="radio" name="role" value="${v}" ${app.pendingView===v || (!app.pendingView&&v==='stage')?'checked':''}><span class="role-pick-content">${icon(i,23)}<strong>${n}</strong><small>${d}</small></span></label>`).join('')}
+   </div><div id="join-password-slot">${app.pendingView==='control'?passwordField():''}</div>
+   <button type="submit" class="btn primary wide large">Connect to session ${icon('right',18)}</button>
+   </form></main></div>`;}
+function passwordField(){return `<label for="join-password">CONTROL PASSWORD</label><input id="join-password" name="password" type="password" autocomplete="off" placeholder="Enter controller password" required minlength="6">`;}
+function topbar(){return `<header class="app-header"><div class="app-header-left"><div class="brand small-brand">${logo()}</div><div class="session-chip"><span>SESSION</span><strong>${escape(app.code)}</strong><button title="Copy session link" data-action="copy-link">${icon('link',16)}</button></div></div>
+    <div class="app-header-right"><div id="connection-slot">${indicator()}</div><span class="peer-count" id="peer-count">${app.peers} connected</span>
+    <button class="icon-button" title="Session options" aria-label="Session options" data-action="invite">${icon('more')}</button></div></header>`;}
+function viewNav(){return `<div class="view-nav"><div class="view-segments">${[['projector','monitor','Projector'],['stage','music','Stage'],['control','controls','Control']].map(([v,ic,label])=>`<button class="view-button ${app.role===v?'selected':''}" data-action="view" data-view="${v}">${icon(ic,17)}<span>${label}</span>${v==='control'&&!canControl()?icon('lock',12):''}</button>`).join('')}</div></div>`;}
+function bodyHeader(){
+  const s=currentSong();const set=activeSet(app.data);const blank=app.data?.blank;
+  return `<div class="song-header"><div><div class="breadcrumb">${escape(app.data?.sessionName||set?.name||'Setlist')} <span> / </span> <strong>${escape(s?.title||'No song selected')}</strong></div><h1>${escape(s?.title||'No song selected')}</h1><div class="song-meta">${s?`<span>Key <b>${escape(s.key||'—')}</b></span>${s.bpm?`<span>${s.bpm} BPM</span>`:''}<span>Song ${app.data.cursor.song+1} of ${set?.songs.length||0}</span>`:''}</div></div><span class="live-badge ${blank?'is-blank':''}"><span class="status-dot"></span>${blank?'BLANK':'LIVE'}</span></div>`;
+}
+function songTabs(){return `<div class="song-tabs"><button class="song-tab ${app.tab==='lyrics'?'active':''}" data-action="tab" data-tab="lyrics">${icon('music',17)} Lyrics & chords</button><button class="song-tab ${app.tab==='setlist'?'active':''}" data-action="tab" data-tab="setlist">${icon('list',17)} Setlist</button></div>`;}
+function lineMarkup(line){
+  const segments=chordSegments(line);
+  return `<div class="lyric-line">${segments.map((s,i)=>`<span class="chord-pair">${app.showChords?`<span class="chord-name">${escape(s.chord)||'&nbsp;'}</span>`:''}<span class="lyric-words">${escape(s.text)||'&nbsp;'}</span></span>`).join('')}</div>`;
+}
+function lyricsView(){
+  const s=currentSong(), cursor=app.data?.cursor, control=app.role==='control'&&canControl();
+  if(!s)return `<div class="empty-lyrics">${icon('music',36)}<h2>This set is empty</h2><p>Open Setlist to add your first song.</p></div>`;
+  return `<div class="reading-options"><label class="toggle-label"><input type="checkbox" id="chords-toggle" ${app.showChords?'checked':''}><span>Show chords</span></label><div class="font-controls"><button class="small-icon" data-action="font-less" aria-label="Smaller lyrics" ${app.font===0?'disabled':''}>${icon('minus',16)}</button><span>Aa</span><button class="small-icon" data-action="font-more" aria-label="Larger lyrics" ${app.font===2?'disabled':''}>${icon('plus',16)}</button></div></div>
+  <div class="lyrics-scroll font-${app.font}" id="lyrics-scroll">${s.sections.map((section,si)=>`<div class="section-card ${si===cursor.section?'current':''}"><button class="section-heading ${control?'actionable':''}" ${control?`data-action="jump" data-song="${cursor.song}" data-section="${si}" data-page="0"`:''}><span>${escape(section.name)}</span>${si===cursor.section?'<small>CURRENT SECTION</small>':''}${control?icon('right',16):''}</button>
+  ${section.pages.map((page,pi)=>{const isLive=si===cursor.section&&pi===cursor.page;return `<${control?'button':'div'} class="lyric-slide ${isLive?'on-air':''} ${control?'actionable':''}" ${control?`data-action="jump" data-song="${cursor.song}" data-section="${si}" data-page="${pi}"`:''} ${isLive?'data-current-slide="true"':''}><div class="slide-lines">${page.map(lineMarkup).join('')}</div>${isLive?`<span class="onair-text">${icon('monitor',14)} ON PROJECTOR</span>`:''}</${control?'button':'div'}>`;}).join('')}</div>`).join('')}</div><button class="return-to-live" id="return-to-live" data-action="return-live" ${app.follow?'hidden':''}>${icon('monitor',15)} Return to live</button>`;
+}
+function setlistView(){
+  const set=activeSet(app.data), current=app.data.cursor.song,editing=app.editingSet&&app.role==='control'&&canControl();
+  const library=app.data.library;
+  return `<div class="setlist-content"><div class="set-toolbar"><div class="set-title-wrap"><div class="overline">CURRENT SET</div><h2>${escape(set?.name||'Setlist')}</h2></div>${app.role==='control'&&canControl()?`<button class="btn outline small" data-action="toggle-edit">${icon(editing?'check':'edit',16)} ${editing?'Done':'Edit Setlist'}</button>`:''}</div>
+   ${editing?`<div class="editing-tools"><label>Switch set <select id="set-select" data-action="set-select">${app.data.sets.map(st=>`<option value="${escape(st.id)}" ${st.id===set.id?'selected':''}>${escape(st.name)}</option>`).join('')}</select></label><button data-action="new-set" class="btn outline small">${icon('plus',15)} New set</button><button data-action="rename-set" class="btn outline small">Rename</button><button data-action="open-library" class="btn outline small">${icon('library',15)} Song library</button></div>`:''}
+   <div class="setlist-rows">${(set?.songs||[]).length?set.songs.map((id,i)=>{const song=library.find(x=>x.id===id);if(!song)return '';return `<div class="set-row ${i===current?'active':''}"><span class="track-number">${String(i+1).padStart(2,'0')}</span><div class="set-row-copy"><strong>${escape(song.title)}</strong><span>${escape(song.key||'—')} ${i===current?'· ON AIR':''}</span></div>${editing?`<div class="mini-actions"><button data-action="move" data-index="${i}" data-dir="-1" title="Move up" ${i===0?'disabled':''}>${icon('arrowUp',17)}</button><button data-action="move" data-index="${i}" data-dir="1" title="Move down" ${i===set.songs.length-1?'disabled':''}>${icon('arrowDown',17)}</button><button data-action="remove" data-index="${i}" title="Remove from set">${icon('close',17)}</button></div>`:app.role==='control'&&canControl()?`<button class="btn outline small" data-action="go-song" data-index="${i}">${i===current?'Restart':'Go live'}</button>`:i===current?`<span class="live-mark">${icon('monitor',17)}</span>`:''}</div>`;}).join(''):`<div class="empty-list">No songs yet. Add one from the library.</div>`}</div>
+   ${editing?`<button class="add-song-button" data-action="open-library">${icon('plus',18)} Add songs from library</button>`:''}
+   ${app.role==='control'&&canControl()&&!editing?`<p class="setlist-helper">Tap “Go live” to switch songs. Editing won't change what's projected until you choose a live song.</p>`:''}
+  </div>`;
+}
+function controlDock(){if(app.role!=='control'||!canControl())return '';
+  const s=app.data,c=app.data.cursor,part=activeSection(s);
+  return `<div class="control-dock"><div class="dock-caption"><span><b>${escape(part?.name||'No section')}</b>${part?` <span class="caption-sep">·</span> Slide ${c.page+1} / ${part.pages.length}`:''}</span><span class="controller-indicator">${icon('controls',15)} LIVE CONTROL</span></div>
+   <div class="dock-buttons"><button class="dock-button back" data-action="back" ${atStart(s)?'disabled':''}>${icon('left',26)}<strong>Back</strong></button><button class="dock-button next" data-action="next" ${atEnd(s)?'disabled':''}><strong>Next</strong>${icon('right',26)}</button><button class="dock-button blank ${s.blank?'active':''}" data-action="blank">${icon(s.blank?'show':'blank',25)}<strong>${s.blank?'Show':'Blank'}</strong></button></div></div>`;
+}
+function stageScreen(){return `${topbar()}<main class="performance-shell">${viewNav()}<div class="performance-panel">${app.data?`${bodyHeader()}${songTabs()}${app.tab==='lyrics'?lyricsView():setlistView()}`:`<div class="waiting-host"><span class="spin"></span><h2>Waiting for the host</h2><p>Keep this page open while the host connects. Your screen will populate automatically.</p></div>`}${controlDock()}</div></main>`;}
+function projectedText(){const sec=activeSection(app.data),c=app.data?.cursor;return sec?.pages[c.page]?.map(s=>chordSegments(s).map(x=>x.text).join(''))||[];}
+function projectorScreen(){return `<div class="projector-shell" id="projector-shell"><div class="projection-frame ${app.data?.blank?'is-black':''} projection-font-${app.projectorFont}">
+  ${app.data&&!app.data.blank?`<div class="projected-lines">${projectedText().map(t=>`<div>${escape(t)}</div>`).join('')||'<div class="projector-placeholder">Waiting for lyrics</div>'}</div>`:!app.data?'<div class="projected-lines projector-placeholder">Waiting for host…</div>':''}
+  </div><div class="projector-tools ${app.showProjectorTools?'open':''}"><div class="projector-tools-head"><span>${escape(currentSong()?.title||'Lyrics Live')} ${activeSection(app.data)?'· '+escape(activeSection(app.data).name):''}</span>${indicator()}</div><div class="projector-tool-row"><button class="btn outline small" data-action="projector-font-less" ${app.projectorFont===0?'disabled':''}>${icon('minus',17)} A</button><button class="btn outline small" data-action="projector-font-more" ${app.projectorFont===4?'disabled':''}>${icon('plus',17)} A</button><button class="btn outline small" data-action="fullscreen">${icon('fullscreen',16)} Fullscreen</button><button class="btn outline small" data-action="projection-options">${icon('settings',17)} ${app.showProjectorTools?'Hide':'Options'}</button><button class="btn outline small" data-action="projector-return">${icon('left',17)} Leave view</button></div></div>
+ <button class="projection-gear" data-action="projection-options" title="Projector settings" aria-label="Projector settings">${icon('settings',23)}</button></div>`;}
+function modal(){if(app.showInvite && (app.screen==='session'||app.screen==='demo'))return inviteModal();
+  if(!app.modal)return '';
+  const wrap=content=>`<div class="modal-backdrop" data-action="close-modal"><div class="modal-card" role="dialog" aria-modal="true" >${content}</div></div>`;
+  const close=`<button class="icon-button close-modal" aria-label="Close" data-action="close-modal">${icon('close')}</button>`;
+  if(app.modal==='auth')return wrap(`${close}<span class="modal-symbol">${icon('lock',24)}</span><h2>Controller access</h2><p>Enter the session's Control password. Stage and Projector don't require it.</p><form id="reauth-form"><label>CONTROL PASSWORD</label><input type="password" name="password" autocomplete="off" required minlength="6"><button class="btn primary wide large" type="submit">Unlock Control</button></form>`);
+  if(app.modal==='connect-failed')return wrap(`${close}<span class="modal-symbol">${icon('wifi',24)}</span><h2>Connection unavailable</h2><p>The signaling connection couldn't start. Check your internet connection and make sure the VDO.Ninja SDK isn't blocked.</p><button class="btn primary wide" data-action="leave">Return home</button>`);
+  if(app.modal==='create-set')return wrap(`${close}<h2>Create a set</h2><p>Organize songs for another service or rehearsal.</p><form id="create-set-form"><label>SET NAME</label><input name="name" maxlength="80" placeholder="Friday Night Worship" required><button type="submit" class="btn primary wide large">Create set</button></form>`);
+  if(app.modal==='rename-set')return wrap(`${close}<h2>Rename set</h2><form id="rename-set-form"><label>SET NAME</label><input name="name" maxlength="80" value="${escape(setName())}" required><button type="submit" class="btn primary wide large">Save name</button></form>`);
+  if(app.modal==='library')return wrap(`<div class="modal-wide">${close}<div class="overline">SONG LIBRARY</div><h2>Your songs</h2><p>Add a song to the current set, or create something new.</p><div class="library-list">${app.data.library.map(song=>`<div class="library-entry"><div><strong>${escape(song.title)}</strong><small>Key ${escape(song.key||'—')} · ${song.sections.length} sections</small></div><div class="mini-actions"><button data-action="edit-song" data-id="${escape(song.id)}" title="Edit song">${icon('edit',17)}</button><button data-action="add-song" data-id="${escape(song.id)}" title="Add to set">${icon('plus',20)}</button></div></div>`).join('')}</div><button class="btn primary wide large" data-action="new-song">${icon('plus',17)} Create new song</button></div>`);
+  if(app.modal==='song-editor'){
+    const song=app.editor||{id:'',title:'',key:'',bpm:0,source:'[Verse 1]\n[G]Your lyrics here\n[C]Another lyric line\n\n[Chorus]\n[D]Sing this part together'};
+    return wrap(`<div class="modal-wide song-editor-modal">${close}<div class="overline">SONG EDITOR</div><h2>${song.id?'Edit song':'New song'}</h2><form id="song-editor-form"><input type="hidden" name="id" value="${escape(song.id||'')}"><div class="editor-fields"><label>Song title<input name="title" maxlength="100" required value="${escape(song.title)}"></label><label>Key<input name="key" maxlength="16" value="${escape(song.key)}" placeholder="G"></label><label>BPM<input name="bpm" type="number" min="0" max="300" value="${Number(song.bpm)||''}" placeholder="Optional"></label></div><label>LYRICS + CHORDS</label><textarea name="source" spellcheck="false" rows="13" required>${escape(song.source)}</textarea><p class="help">Use [Verse 1], [Chorus], [Bridge] for sections. Put chords before lyrics like [G]Amazing [D]grace. Separate slides with a blank line or ---; otherwise slides contain two lines.</p><div class="editor-actions"><button class="btn outline" type="button" data-action="close-modal">Cancel</button><button class="btn primary" type="submit">Save song ${icon('check',17)}</button></div></form></div>`);
+  }
+  return '';
+}
+function inviteModal(){return `<div class="modal-backdrop" data-action="close-invite"><div class="modal-card" role="dialog" aria-modal="true" ><button class="icon-button close-modal" data-action="close-invite" aria-label="Close">${icon('close')}</button><div class="overline">YOUR LIVE SESSION</div><h2>Invite your team</h2><p>Open the same website on another device and enter the code. Or share the link.</p><div class="code-display">${escape(app.code)}</div><div class="invite-link">${escape(sessionLink())}</div><div class="invite-actions"><button class="btn primary" data-action="copy-link">${icon('link',16)} Copy invite link</button><button class="btn outline" data-action="open-projector">${icon('external',16)} Open projector tab</button></div><div class="modal-note">${app.screen==='demo'?'Demo mode does not connect to other devices.':'Keep the host browser open and prevent the computer from sleeping.'}</div><div class="modal-divider"></div><div class="backups"><button data-action="export">${icon('download',18)} Export backup</button>${app.isHost?`<button data-action="import">${icon('upload',18)} Import backup</button>`:''}</div><button class="btn outline wide" data-action="leave">${icon('left',17)} ${app.isHost?'End host session':'Leave session'}</button></div></div>`;}
+function render(){
+  const el=$('#app');if(!el)return;
+  const isPerformance=(app.screen==='session'||app.screen==='demo');
+  const keepScroll=app.tab==='lyrics' && app.role!=='projector' && !app.follow ? ($('.lyrics-scroll')?.scrollTop??app.scrollTop):0;
+  el.innerHTML= app.screen==='welcome'?welcome():app.screen==='create'?createView():app.screen==='join'?joinView():app.role==='projector'?projectorScreen():stageScreen();
+  if(isPerformance)el.insertAdjacentHTML('beforeend',modal());
+  if(!$('#toast-root'))el.insertAdjacentHTML('beforeend','<div id="toast-root"></div>');renderToast();
+  if(!app.follow && $('.lyrics-scroll'))$('.lyrics-scroll').scrollTop=keepScroll;
+  if(app.follow && isPerformance && app.tab==='lyrics' && app.role!=='projector')followLive();
+}
+function followLive(){if(!app.follow)return;requestAnimationFrame(()=>{
+  const sc=$('.lyrics-scroll'),live=$('[data-current-slide="true"]');if(!sc||!live)return;
+  app.programScroll=true;
+  sc.scrollTop=Math.max(0,sc.scrollTop+live.getBoundingClientRect().top-sc.getBoundingClientRect().top-sc.clientHeight*0.35);
+  requestAnimationFrame(()=>{app.programScroll=false;});
+ });}
+function downloadJson(){
+  if(!app.data)return;const text=JSON.stringify({...app.data,blank:false},null,2);
+  const url=URL.createObjectURL(new Blob([text],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='lyrics-live-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),4000);
+}
+async function copyText(value){try{await navigator.clipboard.writeText(value);toast('Link copied.');}catch(e){toast('Could not copy automatically. Select the link shown to copy it.');}}
+async function handleAction(btn){
+  const action=btn.dataset.action;
+  if(action==='show-create'){app.screen='create';render();}
+  if(action==='home'){app.screen='welcome';app.pendingView='';render();}
+  if(action==='preview'){preview();}
+  if(action==='close-modal'){app.modal='';render();}
+  if(action==='close-invite'){app.showInvite=false;render();}
+  if(action==='invite'){app.showInvite=true;render();}
+  if(action==='view'){jumpLocal(btn.dataset.view);}
+  if(action==='tab'){app.tab=btn.dataset.tab;app.follow=true;app.scrollTop=0;render();}
+  if(action==='chords-toggle'){app.showChords=!app.showChords;render();}
+  if(action==='font-less'){app.font=Math.max(0,app.font-1);render();}
+  if(action==='font-more'){app.font=Math.min(2,app.font+1);render();}
+  if(action==='projector-font-less'){app.projectorFont=Math.max(0,app.projectorFont-1);render();}
+  if(action==='projector-font-more'){app.projectorFont=Math.min(4,app.projectorFont+1);render();}
+  if(action==='projection-options'){app.showProjectorTools=!app.showProjectorTools;render();}
+  if(action==='projector-return'){if(app.isHost||app.authorized)jumpLocal('control');else jumpLocal('stage');}
+  if(action==='fullscreen'){const el=$('#projector-shell');if(document.fullscreenElement)await document.exitFullscreen();else await el?.requestFullscreen?.();}
+  if(action==='back')dispatch({kind:'step',dir:-1});
+  if(action==='next')dispatch({kind:'step',dir:1});
+  if(action==='blank')dispatch({kind:'blank',value:!app.data.blank});
+  if(action==='jump'){dispatch({kind:'jump',index:Number(btn.dataset.song),section:Number(btn.dataset.section),page:Number(btn.dataset.page)});}
+  if(action==='go-song'){dispatch({kind:'jump',index:Number(btn.dataset.index),section:0,page:0});app.tab='lyrics';render();}
+  if(action==='return-live'){app.follow=true;render();followLive();}
+  if(action==='toggle-edit'){app.editingSet=!app.editingSet;render();}
+  if(action==='new-set'){app.modal='create-set';render();}
+  if(action==='rename-set'){app.modal='rename-set';render();}
+  if(action==='open-library'){app.modal='library';render();}
+  if(action==='new-song'){app.editor=null;app.modal='song-editor';render();}
+  if(action==='edit-song'){app.editor=app.data.library.find(x=>x.id===btn.dataset.id);app.modal='song-editor';render();}
+  if(action==='add-song'){dispatch({kind:'add-to-set',id:btn.dataset.id});toast('Added to setlist.');}
+  if(action==='move'){dispatch({kind:'move-in-set',index:Number(btn.dataset.index),dir:Number(btn.dataset.dir)});}
+  if(action==='remove'){dispatch({kind:'remove-from-set',index:Number(btn.dataset.index)});}
+  if(action==='copy-link')copyText(sessionLink());
+  if(action==='open-projector'){
+    if(app.screen==='demo'){toast('Projector tabs need a live session.');return;}
+    window.open(sessionLink('projector'),'_blank','noopener,noreferrer');
+  }
+  if(action==='export')downloadJson();
+  if(action==='import')$('#backup-input').click();
+  if(action==='leave'){
+    if(app.isHost&&!confirm('End hosting? Other devices will lose live synchronization.'))return;
+    await leave();
+  }
+}
+document.addEventListener('click',e=>{
+  const btn=e.target.closest('[data-action]');if(!btn)return;
+  if(btn.matches('.modal-backdrop')&&e.target!==btn)return;
+  e.preventDefault();handleAction(btn).catch(err=>toast(err.message||'Action failed.'));
+});
+document.addEventListener('change',e=>{
+  if(e.target.name==='role'){app.pendingView=e.target.value;const slot=$('#join-password-slot');if(slot)slot.innerHTML=e.target.value==='control'?passwordField():'';}
+  if(e.target.id==='chords-toggle'){app.showChords=e.target.checked;render();}
+  if(e.target.id==='set-select'){dispatch({kind:'activate-set',id:e.target.value});}
+});
+document.addEventListener('scroll',e=>{
+  if(e.target.id==='lyrics-scroll'&&!app.programScroll){app.scrollTop=e.target.scrollTop;app.follow=false;const b=$('#return-to-live');if(b)b.hidden=false;}
+},true);
+document.addEventListener('submit',async e=>{
+  const form=e.target;if(!(form instanceof HTMLFormElement))return;e.preventDefault();const values=Object.fromEntries(new FormData(form).entries());const formId=form.getAttribute('id');
+  try {
+    if(formId==='join-form') {app.pendingCode=String(values.code).trim().toUpperCase();app.screen='join';render();}
+    if(formId==='create-form') {await startSession({host:true,code:sessionCode(),password:String(values.password),role:'control',name:values.name});}
+    if(formId==='join-role-form') {
+      const code=String(values.code).toUpperCase().replace(/[^A-Z0-9]/g,'');if(code.length!==6)throw new Error('Enter a six-character code.');
+      await startSession({host:false,code,password:values.password||'',role:values.role||'stage'});
+      app.pendingView='';
+    }
+    if(formId==='reauth-form'){
+      app.password=String(values.password);app.peer.password=app.password;if(!app.peer.hostUuid)throw new Error('Host not connected yet. Try again once connected.');app.peer.send({kind:'auth',password:app.password},app.peer.hostUuid);
+      app.role='control';app.modal='';render();
+    }
+    if(formId==='create-set-form'){dispatch({kind:'create-set',name:values.name});app.modal='';render();}
+    if(formId==='rename-set-form'){dispatch({kind:'rename-set',name:values.name});app.modal='';render();}
+    if(formId==='song-editor-form') {
+      const song=validSong(values);dispatch({kind:'save-song',song});app.modal='library';app.editor=null;render();toast('Song saved.');
+    }
+  }catch(error){toast(error.message||'Could not continue.');}
+});
+document.addEventListener('keydown',e=>{
+  const editable=e.target.closest('input,textarea,select,[contenteditable="true"]');
+  if(e.key==='Escape'&&(app.modal||app.showInvite)){app.modal='';app.showInvite=false;render();return;}
+  if(editable||app.modal||app.showInvite||!canControl()||(app.screen!=='session'&&app.screen!=='demo'))return;
+  if(e.key==='ArrowRight'||e.key==='ArrowDown'){e.preventDefault();dispatch({kind:'step',dir:1});}
+  if(e.key==='ArrowLeft'||e.key==='ArrowUp'){e.preventDefault();dispatch({kind:'step',dir:-1});}
+  if(e.key.toLowerCase()==='b'){e.preventDefault();dispatch({kind:'blank',value:!app.data.blank});}
+});
+const backupInput=document.createElement('input');backupInput.id='backup-input';backupInput.type='file';backupInput.accept='.json,application/json';backupInput.hidden=true;document.body.appendChild(backupInput);
+backupInput.addEventListener('change',async()=>{
+  const file=backupInput.files?.[0];backupInput.value='';if(!file)return;
+  if(!app.isHost){toast('Import backups on the host device.');return;}
+  try {
+    if(file.size>2_000_000)throw new Error('Backup is too large (2 MB limit).');
+    if(!confirm('Replace the host song library and sets with this backup?'))return;
+    const restored=validateImport(JSON.parse(await file.text()));restored.rev=app.data.rev+1;app.data=restored;persist();app.peer?.sendSnapshot();app.showInvite=false;render();toast('Backup imported.');
+  }catch(e){toast(e.message||'Import failed.');}
+});
+if(app.pendingCode.length===6){app.screen='join';}
+if(params.get('demo')==='1') preview();
+else render();
+// Projector deep links auto-join without an extra role selection step.
+if(app.screen==='join' && ['projector','stage'].includes(app.pendingView))startSession({host:false,code:app.pendingCode,password:'',role:app.pendingView});
