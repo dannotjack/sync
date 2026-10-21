@@ -1,5 +1,5 @@
-import { STORAGE_KEY, sampleState, validateImport, validSong, songToText, applyAction, activeSet, activeSong, activeSection, atStart, atEnd, chordSegments, SONG_SYNTAX_EXAMPLE, parseSongText, arrangeSections } from './model.js?v=beta5';
-import { LyricsPeer } from './sync.js?v=beta5';
+import { STORAGE_KEY, sampleState, validateImport, validSong, songToText, applyAction, activeSet, activeSong, activeSection, atStart, atEnd, chordSegments, SONG_SYNTAX_EXAMPLE, parseSongText, arrangeSections } from './model.js?v=beta6';
+import { LyricsPeer } from './sync.js?v=beta6';
 const $ = (query, root=document) => root.querySelector(query);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icon = (name, size=20) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${({
@@ -173,17 +173,16 @@ function projectorScreen(){return `<div class="projector-shell" id="projector-sh
 function updateOrderPreview(){
   const form=$('#song-editor-form'),out=$('#order-preview');if(!form||!out)return;
   const sections=parseSongText(form.elements.source.value),order=form.elements.order.value;
-  try{const result=arrangeSections(sections,order);out.classList.remove('invalid');out.innerHTML=result.length?`<span class="preview-label">${order.trim()?'WILL PLAY':'LYRICS ORDER'}</span><div class="order-chips">${result.map(s=>`<span>${escape(s.name)}</span>`).join('<b aria-hidden="true">→</b>')}</div>`:'Add section headings and lyrics or # stage notes to see the order.';}
+  try{const result=arrangeSections(sections,order);out.classList.remove('invalid');out.innerHTML=result.length?`<span class="preview-label">${order.trim()?'WILL PLAY':'LYRICS ORDER'}</span><div class="order-chips">${result.map(s=>`<span>${escape(s.name)} <small>· ${s.pages.length} ${s.pages.length===1?'slide':'slides'}</small></span>`).join('<b aria-hidden="true">→</b>')}</div>`:'Add section headings and lyrics or # stage notes to see the order.';}
   catch(error){out.classList.add('invalid');out.textContent=error.message;}
 }
 document.addEventListener('input',e=>{if(e.target.closest('#song-editor-form')&&['source','order'].includes(e.target.name))updateOrderPreview();});
 function syntaxExamples(){
   const examples=[
-    ['Sections & chords','[Verse 1]\n[G]Amazing [D]grace\n[Em7]How sweet the [C]sound'],
-    ['Stage-only notes','[Chorus]\n# All voices in; build here.\n[G]Sing together'],
-    ['Slide breaks','[Verse]\n[G]First slide\n---\n[C]Second slide\n\n[D]Third slide'],
-    ['Alternative section syntax','{start_of_bridge: Bridge}\n# Guitar only\n# Repeat twice\n[Am]Carry us [G/B]home\n{end_of_bridge}'],
-    ['Instrumental section','[Intro]\n# Guitar only, four bars.']
+    ['Sections & slides','[Verse 1]\nFirst line\nSecond line\n---\nThird line\nFourth line\n\n[Verse 2]\nNext verse begins here'],
+    ['Chords','[Chorus]\n[G]Amazing [D/F#]grace\n[Em7]How sweet the [C]sound'],
+    ['Stage notes','[Verse 1]\n# Guitar only. Sing softly.\n[G]Only the lyric words reach the projector'],
+    ['Instrumental section','[Outro]\n# Guitar only, four bars.']
   ];
   return examples.map(([title,source])=>{
     const sections=parseSongText(source);
@@ -201,7 +200,7 @@ function modal(){if(app.showInvite && (app.screen==='session'||app.screen==='dem
   if(app.modal==='library')return wrap(`<div class="modal-wide">${close}<div class="overline">SONG LIBRARY</div><h2>Your songs</h2><p>Add a song to the current set, or create something new.</p><div class="library-list">${app.data.library.map(song=>`<div class="library-entry"><div><strong>${escape(song.title)}</strong><small>Key ${escape(song.key||'—')} · ${song.sections.length} sections</small></div><div class="mini-actions"><button data-action="edit-song" data-id="${escape(song.id)}" title="Edit song">${icon('edit',17)}</button><button data-action="add-song" data-id="${escape(song.id)}" title="Add to set">${icon('plus',20)}</button></div></div>`).join('')}</div><button class="btn primary wide large" data-action="new-song">${icon('plus',17)} Create new song</button></div>`);
   if(app.modal==='song-editor'){
     const song=app.editor||{id:'',title:'',key:'',bpm:0,order:'',source:''};
-    return wrap(`<div class="modal-wide song-editor-modal">${close}<div class="overline">SONG EDITOR</div><h2>${song.id?'Edit song':'New song'}</h2><form id="song-editor-form"><input type="hidden" name="id" value="${escape(song.id||'')}"><div class="editor-fields"><label>Song title<input name="title" maxlength="100" required value="${escape(song.title)}"></label><label>Key<input name="key" maxlength="16" value="${escape(song.key)}" placeholder="G"></label><label>BPM<input name="bpm" type="number" min="0" max="300" value="${Number(song.bpm)||''}" placeholder="Optional"></label></div><label>SECTION ORDER<input name="order" maxlength="2000" value="${escape(song.order||'')}" placeholder="Verse 1, Chorus, Verse 2, Chorus, Bridge, Chorus" aria-describedby="order-preview"></label><div id="order-preview" class="order-preview" aria-live="polite"></div><p class="help">Optional. Use headings, V1 / C / B, or section numbers separated by commas. Leave empty to follow the lyrics below.</p><label>LYRICS + CHORDS</label><textarea name="source" spellcheck="false" rows="13" placeholder="${escape(SONG_SYNTAX_EXAMPLE)}" required>${escape(song.source)}</textarea><p class="help">[Section] · [G]chords · # stage notes · blank line or --- for slide breaks. Two lyric lines per slide.</p><details class="syntax-guide"><summary>Syntax examples & previews</summary>${syntaxExamples()}<details><summary>Complete syntax reference</summary><pre>${escape(SONG_SYNTAX_EXAMPLE)}</pre></details></details><div class="editor-actions"><button class="btn outline" type="button" data-action="close-modal">Cancel</button><button class="btn primary" type="submit">Save song ${icon('check',17)}</button></div></form></div>`);
+    return wrap(`<div class="modal-wide song-editor-modal">${close}<div class="overline">SONG EDITOR</div><h2>${song.id?'Edit song':'New song'}</h2><form id="song-editor-form"><input type="hidden" name="id" value="${escape(song.id||'')}"><div class="editor-fields"><label>Song title<input name="title" maxlength="100" required value="${escape(song.title)}"></label><label>Key<input name="key" maxlength="16" value="${escape(song.key)}" placeholder="G"></label><label>BPM<input name="bpm" type="number" min="0" max="300" value="${Number(song.bpm)||''}" placeholder="Optional"></label></div><label>SECTION ORDER<input name="order" maxlength="2000" value="${escape(song.order||'')}" placeholder="Verse 1, Chorus, Verse 2, Chorus, Bridge, Chorus" aria-describedby="order-preview"></label><div id="order-preview" class="order-preview" aria-live="polite"></div><p class="help">Optional. Use headings, V1 / C / B, or section numbers separated by commas. Leave empty to follow the lyrics below.</p><label>LYRICS + CHORDS</label><textarea name="source" spellcheck="false" rows="13" placeholder="${escape(SONG_SYNTAX_EXAMPLE)}" required>${escape(song.source)}</textarea><p class="help">[Verse 1] starts a section. --- starts another slide in that section. The next heading starts a new section. Blank lines are spacing only.</p><details class="syntax-guide"><summary>How to write lyrics</summary><p class="help">Four things: [Section], --- for slides, [G] for chords, # for stage notes. No closing tags needed.</p>${syntaxExamples()}<details><summary>Full song example</summary><pre>${escape(SONG_SYNTAX_EXAMPLE)}</pre></details></details><div class="editor-actions"><button class="btn outline" type="button" data-action="close-modal">Cancel</button><button class="btn primary" type="submit">Save song ${icon('check',17)}</button></div></form></div>`);
   }
   return '';
 }

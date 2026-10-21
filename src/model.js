@@ -30,10 +30,10 @@ export function parseSongText(source) {
     const chordProStart = /^\{start_of_(verse|chorus|bridge)(?::([^}]+))?\}$/i.exec(line);
     if (chordProStart) { begin(chordProStart[2] || chordProStart[1]); continue; }
     if (/^\{end_of_/.test(line)) { flush(); continue; }
-    if (line === '---' || line === '') { flush(); continue; }
+    if (line === '---') { flush(); continue; }
+    if(line==='')continue;
     if (!current) begin('Verse 1');
     slide.push(line.slice(0, 300));
-    if (slide.length >= 2) flush();
   }
   flush();
   return sections.filter(s=>s.pages.length||s.notes.length).map(s=>{if(!s.pages.length)s.pages=[[]];return s;});
@@ -242,42 +242,26 @@ export function chordSegments(input) {
 }
 
 // The editor's empty-field example lists the complete supported syntax.
-export const SONG_SYNTAX_EXAMPLE = `[Intro]
-# Guitar only, four bars.
-
-[Verse 1]
-# Sing softly.
-[G]First lyric line [D/F#]continues here
-[Em7]Second line [Csus4]continues here
+export const SONG_SYNTAX_EXAMPLE = `[Verse 1]
+# Guitar only. Sing softly.
+[G]First line of verse one
+[D]Second line of verse one
 ---
-[G]A single-line slide
+[Em]Third line of verse one
+[C]Fourth line of verse one
+
+[Verse 2]
+# All voices in.
+[G]First line of verse two
+[D]Second line of verse two
 
 [Chorus]
-# All voices in. Repeat twice.
-[C]Chords before words: [G/B]major, [Am]minor, [D7]seventh
-[Dsus4]Suspended, [F#dim]diminished, [Gadd9]added, [Bb]flat
-
-[Bridge]
-# Build, then drop to guitar.
-[Em]Only these lyrics reach the projector
-[C]Blank lines or --- separate slides
-
-{start_of_verse: Verse 2}
-[G]Alternative section syntax
-{end_of_verse}
-{start_of_chorus}
-[C]Alternative chorus
-{end_of_chorus}
-{start_of_bridge: Final bridge}
-[D]Alternative bridge
-{end_of_bridge}
+# Build here. Repeat twice.
+[C]Chorus line one
+[G]Chorus line two
+---
+[Am]Chorus line three
+[D]Chorus line four
 
 [Outro]
-# Instrumental ending.
-
-{title: Optional metadata; use the fields above}
-{subtitle: Optional subtitle}
-{artist: Artist}
-{key: G}
-{tempo: 76}
-{time: 4/4}`;
+# Guitar only, four bars.`;
