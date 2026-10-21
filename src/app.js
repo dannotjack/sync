@@ -1,5 +1,5 @@
-import { STORAGE_KEY, sampleState, validateImport, validSong, songToText, applyAction, activeSet, activeSong, activeSection, atStart, atEnd, chordSegments, SONG_SYNTAX_EXAMPLE, parseSongText } from './model.js?v=beta4';
-import { LyricsPeer } from './sync.js?v=beta4';
+import { STORAGE_KEY, sampleState, validateImport, validSong, songToText, applyAction, activeSet, activeSong, activeSection, atStart, atEnd, chordSegments, SONG_SYNTAX_EXAMPLE, parseSongText, arrangeSections } from './model.js?v=beta5';
+import { LyricsPeer } from './sync.js?v=beta5';
 const $ = (query, root=document) => root.querySelector(query);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icon = (name, size=20) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${({
@@ -39,7 +39,7 @@ function loadSaved(){
     clean.activeSetId=clean.sets.some(x=>x.id===saved.activeSetId)?saved.activeSetId:clean.sets[0].id;
     const cursor=saved.cursor;
     if(cursor && Number.isInteger(cursor.song)&&Number.isInteger(cursor.section)&&Number.isInteger(cursor.page))clean.cursor=cursor;
-    clean.blank=false;
+    clean.blank=true;
     return clean;
   }catch(e){console.warn('Could not load library, using sample data',e);return sampleState();}
 }
@@ -49,7 +49,7 @@ function sessionLink(view=''){const url=new URL(location.href);url.search='';url
 const params=new URLSearchParams(location.search);
 const app={
   screen:'welcome',isHost:false,code:'',password:'',role:'control',authorized:false,
-  data:null,peer:null,status:'idle',peers:0,tab:'lyrics',editingSet:false,editor:null,
+  data:null,peer:null,status:'idle',peers:0,tab:'lyrics',editingSet:false,editSetId:null,editor:null,
   showInvite:false,showReadingOptions:false,showProjectorTools:false,showChords:true,font:1,projectorFont:2,follow:true,
   scrollTop:0,programScroll:false,modal:'',message:'',pendingCode:(params.get('join')||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6),
   pendingView:params.get('view')||'',connectLock:false
@@ -60,7 +60,8 @@ function renderToast(){const el=$('#toast-root');if(el)el.innerHTML=app.message?
 function statusLabel(){return ({'connecting':'Connecting…','host-ready':'Hosting session','connected':'Synced','searching':'Finding host…','disconnected':'Disconnected','reconnecting':'Reconnecting…','error':'Connection error','idle':'Offline preview'})[app.status]||'Waiting…';}
 function indicator(){const ok=app.isHost?app.status==='host-ready':app.status==='connected';return `<span class="connection ${ok?'good':'warning'}"><span class="status-dot"></span><span>${escape(statusLabel())}</span></span>`;}
 function currentSong(){return activeSong(app.data);}
-function setName(){return activeSet(app.data)?.name||'Untitled set';}
+function editingSet(){return app.data?.sets.find(s=>s.id===app.editSetId)||activeSet(app.data);}
+function setName(){return editingSet()?.name||'Untitled set';}
 function canControl(){return app.isHost||app.authorized;}
 async function dispatch(action){
   if(!canControl())throw new Error('Controller password required.');
@@ -69,7 +70,7 @@ async function dispatch(action){
   if(app.isHost || app.screen==='demo') {
     const prior=app.data;
     app.data=applyAction(prior,action);persist();render();
-    if(['step','jump','blank'].includes(action.kind))app.peer?.broadcastLive(prior.rev);
+    if(['step','jump','blank'].includes(action.kind)&&prior.cursor.song===app.data.cursor.song&&prior.activeSetId===app.data.activeSetId)app.peer?.broadcastLive(prior.rev);
     else app.peer?.sendSnapshot();
   }else await app.peer.command(action);
 }
@@ -79,6 +80,7 @@ async function startSession({host,code,password,role,name=''}){
   app.isHost=host;app.code=code;app.password=password;app.role=role;
   app.authorized=host;app.screen='session';app.status='connecting';app.tab='lyrics';
   app.data=host?loadSaved():null;
+  if(host){app.data.blank=true;app.data.liveSong=structuredClone(activeSong(app.data));}
   if(host)app.data.sessionName=String(name||app.data.sessionName||'Worship Session').trim().slice(0,80);
   app.showInvite=host;render();
   const peer=new LyricsPeer({code,isHost:host,password:host?password:role==='control'?password:'',
@@ -141,38 +143,47 @@ function lyricsView(){
   const s=currentSong(), cursor=app.data?.cursor, control=app.role==='control'&&canControl();
   if(!s)return `<div class="empty-lyrics">${icon('music',36)}<h2>This set is empty</h2><p>Open Setlist to add your first song.</p></div>`;
   return `<div class="reading-toolbar"><button class="quiet-btn" data-action="reading-options" aria-expanded="${app.showReadingOptions}">${icon('settings',16)} Display</button></div><div class="reading-options" ${app.showReadingOptions?'':'hidden'}><label class="toggle-label"><input type="checkbox" id="chords-toggle" ${app.showChords?'checked':''}><span>Show chords</span></label><div class="font-controls"><button class="small-icon" data-action="font-less" aria-label="Smaller lyrics" ${app.font===0?'disabled':''}>${icon('minus',16)}</button><span>Aa</span><button class="small-icon" data-action="font-more" aria-label="Larger lyrics" ${app.font===2?'disabled':''}>${icon('plus',16)}</button></div></div>
+  ${activeSection(app.data)?.notes?.length?`<aside class="current-notes" aria-label="Current stage notes"><strong>${escape(activeSection(app.data).name)}</strong>${activeSection(app.data).notes.map(n=>`<div class="stage-note">${escape(n)}</div>`).join('')}</aside>`:''}
   <div class="lyrics-scroll font-${app.font}" id="lyrics-scroll">${s.sections.map((section,si)=>`<div class="section-card ${si===cursor.section?'current':''}"><button class="section-heading ${control?'actionable':''}" ${control?`data-action="jump" data-song="${cursor.song}" data-section="${si}" data-page="0"`:''}><span>${escape(section.name)}</span>${si===cursor.section?'<small>CURRENT SECTION</small>':''}${control?icon('right',16):''}</button>
-  ${(section.notes||[]).length?`<div class="stage-notes" aria-label="Stage notes">${section.notes.map(note=>`<div class="stage-note"><span>NOTE</span> ${escape(note)}</div>`).join('')}</div>`:''}
+  ${si!==cursor.section&&(section.notes||[]).length?`<div class="stage-notes" aria-label="Stage notes">${section.notes.map(note=>`<div class="stage-note"><span>NOTE</span> ${escape(note)}</div>`).join('')}</div>`:''}
   ${section.pages.map((page,pi)=>{const isLive=si===cursor.section&&pi===cursor.page;return `<${control?'button':'div'} class="lyric-slide ${isLive?'on-air':''} ${control?'actionable':''}" ${control?`data-action="jump" data-song="${cursor.song}" data-section="${si}" data-page="${pi}"`:''} ${isLive?'data-current-slide="true"':''}><div class="slide-lines">${page.map(line=>lineMarkup(line)).join('')}</div>${isLive?`<span class="onair-text">${icon('monitor',14)} ON PROJECTOR</span>`:''}</${control?'button':'div'}>`;}).join('')}</div>`).join('')}</div><button class="return-to-live" id="return-to-live" data-action="return-live" ${app.follow?'hidden':''}>${icon('monitor',15)} Return to live</button>`;
 }
 function setlistView(){
-  const set=activeSet(app.data), current=app.data.cursor.song,editing=app.editingSet&&app.role==='control'&&canControl();
+  const editing=app.editingSet&&app.role==='control'&&canControl();
+  const set=editing?editingSet():activeSet(app.data),current=set.id===app.data.activeSetId?app.data.cursor.song:-1;
   const library=app.data.library;
   return `<div class="setlist-content"><div class="set-toolbar"><div class="set-title-wrap"><div class="overline">CURRENT SET</div><h2>${escape(set?.name||'Setlist')}</h2></div>${app.role==='control'&&canControl()?`<button class="btn outline small" data-action="toggle-edit">${icon(editing?'check':'edit',16)} ${editing?'Done':'Edit Setlist'}</button>`:''}</div>
-   ${editing?`<div class="editing-tools"><label>Switch set <select id="set-select" data-action="set-select">${app.data.sets.map(st=>`<option value="${escape(st.id)}" ${st.id===set.id?'selected':''}>${escape(st.name)}</option>`).join('')}</select></label><button data-action="new-set" class="btn outline small">${icon('plus',15)} New set</button><button data-action="rename-set" class="btn outline small">Rename</button><button data-action="open-library" class="btn outline small">${icon('library',15)} Song library</button></div>`:''}
-   <div class="setlist-rows">${(set?.songs||[]).length?set.songs.map((id,i)=>{const song=library.find(x=>x.id===id);if(!song)return '';return `<div class="set-row ${i===current?'active':''}">${editing?`<input class="set-position" type="number" min="1" max="${set.songs.length}" step="1" value="${i+1}" data-position-index="${i}" aria-label="Position for ${escape(song.title)}">`:`<span class="track-number">${String(i+1).padStart(2,'0')}</span>`}<div class="set-row-copy"><strong>${escape(song.title)}</strong><span>${escape(song.key||'—')} ${i===current?'· ON AIR':''}</span></div>${editing?`<div class="mini-actions"><button data-action="move" data-index="${i}" data-dir="-1" title="Move up" ${i===0?'disabled':''}>${icon('arrowUp',17)}</button><button data-action="move" data-index="${i}" data-dir="1" title="Move down" ${i===set.songs.length-1?'disabled':''}>${icon('arrowDown',17)}</button><button data-action="remove" data-index="${i}" title="Remove from set">${icon('close',17)}</button></div>`:app.role==='control'&&canControl()?`<button class="btn outline small" data-action="go-song" data-index="${i}">${i===current?'Restart':'Go live'}</button>`:i===current?`<span class="live-mark">${icon('monitor',17)}</span>`:''}</div>`;}).join(''):`<div class="empty-list">No songs yet. Add one from the library.</div>`}</div>
+   ${editing?`<div class="editing-tools"><label>Edit set <select id="set-select" data-action="set-select">${app.data.sets.map(st=>`<option value="${escape(st.id)}" ${st.id===set.id?'selected':''}>${escape(st.name)}</option>`).join('')}</select></label><button class="btn primary small" data-action="take-set-live">Go live with this set</button><button data-action="new-set" class="btn outline small">${icon('plus',15)} New set</button><button data-action="rename-set" class="btn outline small">Rename</button><button data-action="open-library" class="btn outline small">${icon('library',15)} Song library</button></div>`:''}
+   <div class="setlist-rows">${(set?.songs||[]).length?set.songs.map((id,i)=>{const song=library.find(x=>x.id===id);if(!song)return '';return `<div class="set-row ${i===current?'active':''}">${editing?`<input class="set-position" type="number" min="1" max="${set.songs.length}" step="1" value="${i+1}" data-position-index="${i}" aria-label="Position for ${escape(song.title)}">`:`<span class="track-number">${String(i+1).padStart(2,'0')}</span>`}<div class="set-row-copy"><strong>${escape(song.title)}</strong><span>${escape(song.key||'—')} ${i===current?'· ON AIR':''}${i===current&&app.data.liveSong&&(song.source!==app.data.liveSong.source||song.order!==app.data.liveSong.order||song.title!==app.data.liveSong.title)?' · SAVED CHANGES':''}</span></div>${editing?`<div class="mini-actions"><button data-action="move" data-index="${i}" data-dir="-1" title="Move up" ${i===0?'disabled':''}>${icon('arrowUp',17)}</button><button data-action="move" data-index="${i}" data-dir="1" title="Move down" ${i===set.songs.length-1?'disabled':''}>${icon('arrowDown',17)}</button><button data-action="remove" data-index="${i}" title="Remove from set">${icon('close',17)}</button></div>`:app.role==='control'&&canControl()?`<button class="btn outline small" data-action="go-song" data-index="${i}">${i===current?'Go live / reload':'Go live'}</button>`:i===current?`<span class="live-mark">${icon('monitor',17)}</span>`:''}</div>`;}).join(''):`<div class="empty-list">No songs yet. Add one from the library.</div>`}</div>
    ${editing?`<button class="add-song-button" data-action="open-library">${icon('plus',18)} Add songs from library</button>`:''}
-   ${app.role==='control'&&canControl()&&!editing?`<p class="setlist-helper">Tap “Go live” to switch songs. Reordering keeps the live song. Switch songs before removing the live song.</p>`:''}
+   ${app.role==='control'&&canControl()&&!editing?`<p class="setlist-helper">Tap “Go live” to switch songs. Saved edits stay in the library. Go live / reload applies them to the screen.</p>`:''}
   </div>`;
 }
 function controlDock(){if(!app.data||app.role!=='control'||!canControl())return '';
   const s=app.data,c=app.data.cursor,part=activeSection(s);
   return `<div class="control-dock"><div class="dock-caption"><span><b>${escape(part?.name||'No section')}</b>${part?` <span class="caption-sep">·</span> Slide ${c.page+1} / ${part.pages.length}`:''}</span><span class="controller-indicator">${icon('controls',15)} LIVE CONTROL</span></div>
-   <div class="dock-buttons"><button class="dock-button back" data-action="back" ${atStart(s)?'disabled':''}>${icon('left',26)}<strong>Back</strong></button><button class="dock-button next" data-action="next" ${atEnd(s)?'disabled':''}><strong>Next</strong>${icon('right',26)}</button><button class="dock-button blank ${s.blank?'active':''}" data-action="blank">${icon(s.blank?'show':'blank',25)}<strong>${s.blank?'Show':'Blank'}</strong></button></div></div>`;
+   <div class="dock-buttons"><button class="dock-button back" data-action="back" ${atStart(s)?'disabled':''}>${icon('left',26)}<strong>Back</strong></button><button class="dock-button next" data-action="next" ${atEnd(s)?'disabled':''}><strong>Next</strong>${icon('right',26)}</button><button class="dock-button blank ${s.blank?'active':''}" data-action="blank">${icon(s.blank?'show':'blank',25)}<strong>${s.blank?'Go live':'Blank'}</strong></button></div></div>`;
 }
 function stageScreen(){return `${topbar()}<main class="performance-shell">${viewNav()}<div class="performance-panel">${app.data?`${bodyHeader()}${songTabs()}${app.tab==='lyrics'?lyricsView():setlistView()}`:`<div class="waiting-host"><span class="spin"></span><h2>Waiting for the host</h2><p>Keep this page open while the host connects. Your screen will populate automatically.</p></div>`}${controlDock()}</div></main>`;}
 function projectedText(){const sec=activeSection(app.data),c=app.data?.cursor;return sec?.pages[c.page]?.map(s=>chordSegments(s).map(x=>x.text).join(''))||[];}
 function projectorScreen(){return `<div class="projector-shell" id="projector-shell"><div class="projection-frame ${app.data?.blank?'is-black':''} projection-font-${app.projectorFont}">
-  ${app.data&&!app.data.blank?`<div class="projected-lines">${projectedText().map(t=>`<div>${escape(t)}</div>`).join('')||'<div class="projector-placeholder">Waiting for lyrics</div>'}</div>`:!app.data?'<div class="projected-lines projector-placeholder">Waiting for host…</div>':''}
+  ${app.data&&!app.data.blank?`<div class="projected-lines">${projectedText().map(t=>`<div>${escape(t)}</div>`).join('')||(activeSection(app.data)?'':'<div class="projector-placeholder">Waiting for lyrics</div>')}</div>`:!app.data?'<div class="projected-lines projector-placeholder">Waiting for host…</div>':''}
   </div><div class="projector-tools ${app.showProjectorTools?'open':''}"><div class="projector-tools-head"><span>${escape(currentSong()?.title||'Sync Lyrics')} ${activeSection(app.data)?'· '+escape(activeSection(app.data).name):''}</span>${indicator()}</div><div class="projector-tool-row"><button class="btn outline small" data-action="projector-font-less" ${app.projectorFont===0?'disabled':''}>${icon('minus',17)} A</button><button class="btn outline small" data-action="projector-font-more" ${app.projectorFont===4?'disabled':''}>${icon('plus',17)} A</button><button class="btn outline small" data-action="fullscreen">${icon('fullscreen',16)} Fullscreen</button><button class="btn outline small" data-action="projection-options">${icon('settings',17)} ${app.showProjectorTools?'Hide':'Options'}</button><button class="btn outline small" data-action="projector-return">${icon('left',17)} Leave view</button></div></div>
  <button class="projection-gear" data-action="projection-options" title="Projector settings" aria-label="Projector settings">${icon('settings',23)}</button></div>`;}
+function updateOrderPreview(){
+  const form=$('#song-editor-form'),out=$('#order-preview');if(!form||!out)return;
+  const sections=parseSongText(form.elements.source.value),order=form.elements.order.value;
+  try{const result=arrangeSections(sections,order);out.classList.remove('invalid');out.innerHTML=result.length?`<span class="preview-label">${order.trim()?'WILL PLAY':'LYRICS ORDER'}</span><div class="order-chips">${result.map(s=>`<span>${escape(s.name)}</span>`).join('<b aria-hidden="true">→</b>')}</div>`:'Add section headings and lyrics or # stage notes to see the order.';}
+  catch(error){out.classList.add('invalid');out.textContent=error.message;}
+}
+document.addEventListener('input',e=>{if(e.target.closest('#song-editor-form')&&['source','order'].includes(e.target.name))updateOrderPreview();});
 function syntaxExamples(){
   const examples=[
     ['Sections & chords','[Verse 1]\n[G]Amazing [D]grace\n[Em7]How sweet the [C]sound'],
-    ['Stage-only notes','[Chorus]\n{note: All voices in; build here.}\n[G]Sing together'],
+    ['Stage-only notes','[Chorus]\n# All voices in; build here.\n[G]Sing together'],
     ['Slide breaks','[Verse]\n[G]First slide\n---\n[C]Second slide\n\n[D]Third slide'],
-    ['Alternative section syntax','{start_of_bridge: Bridge}\n{comment: Guitar only}\n{c: Repeat twice}\n[Am]Carry us [G/B]home\n{end_of_bridge}'],
-    ['Metadata & editor comments','{title: Song title}\n{key: G}\n# Private editing comment\n[Verse]\n[G]Only these words are projected']
+    ['Alternative section syntax','{start_of_bridge: Bridge}\n# Guitar only\n# Repeat twice\n[Am]Carry us [G/B]home\n{end_of_bridge}'],
+    ['Instrumental section','[Intro]\n# Guitar only, four bars.']
   ];
   return examples.map(([title,source])=>{
     const sections=parseSongText(source);
@@ -190,7 +201,7 @@ function modal(){if(app.showInvite && (app.screen==='session'||app.screen==='dem
   if(app.modal==='library')return wrap(`<div class="modal-wide">${close}<div class="overline">SONG LIBRARY</div><h2>Your songs</h2><p>Add a song to the current set, or create something new.</p><div class="library-list">${app.data.library.map(song=>`<div class="library-entry"><div><strong>${escape(song.title)}</strong><small>Key ${escape(song.key||'—')} · ${song.sections.length} sections</small></div><div class="mini-actions"><button data-action="edit-song" data-id="${escape(song.id)}" title="Edit song">${icon('edit',17)}</button><button data-action="add-song" data-id="${escape(song.id)}" title="Add to set">${icon('plus',20)}</button></div></div>`).join('')}</div><button class="btn primary wide large" data-action="new-song">${icon('plus',17)} Create new song</button></div>`);
   if(app.modal==='song-editor'){
     const song=app.editor||{id:'',title:'',key:'',bpm:0,order:'',source:''};
-    return wrap(`<div class="modal-wide song-editor-modal">${close}<div class="overline">SONG EDITOR</div><h2>${song.id?'Edit song':'New song'}</h2><form id="song-editor-form"><input type="hidden" name="id" value="${escape(song.id||'')}"><div class="editor-fields"><label>Song title<input name="title" maxlength="100" required value="${escape(song.title)}"></label><label>Key<input name="key" maxlength="16" value="${escape(song.key)}" placeholder="G"></label><label>BPM<input name="bpm" type="number" min="0" max="300" value="${Number(song.bpm)||''}" placeholder="Optional"></label></div><label>SECTION ORDER<input name="order" maxlength="2000" value="${escape(song.order||'')}" placeholder="Verse 1, Chorus, Verse 2, Chorus, Bridge, Chorus"></label><p class="help">Optional. Use headings, V1 / C / B, or section numbers separated by commas. Leave empty to follow the lyrics below.</p><label>LYRICS + CHORDS</label><textarea name="source" spellcheck="false" rows="13" placeholder="${escape(SONG_SYNTAX_EXAMPLE)}" required>${escape(song.source)}</textarea><p class="help">[Section] · [G]chords · {note: stage directions} · blank line or --- for slide breaks. Two lyric lines per slide.</p><details class="syntax-guide"><summary>Syntax examples & previews</summary>${syntaxExamples()}<details><summary>Complete syntax reference</summary><pre>${escape(SONG_SYNTAX_EXAMPLE)}</pre></details></details><div class="editor-actions"><button class="btn outline" type="button" data-action="close-modal">Cancel</button><button class="btn primary" type="submit">Save song ${icon('check',17)}</button></div></form></div>`);
+    return wrap(`<div class="modal-wide song-editor-modal">${close}<div class="overline">SONG EDITOR</div><h2>${song.id?'Edit song':'New song'}</h2><form id="song-editor-form"><input type="hidden" name="id" value="${escape(song.id||'')}"><div class="editor-fields"><label>Song title<input name="title" maxlength="100" required value="${escape(song.title)}"></label><label>Key<input name="key" maxlength="16" value="${escape(song.key)}" placeholder="G"></label><label>BPM<input name="bpm" type="number" min="0" max="300" value="${Number(song.bpm)||''}" placeholder="Optional"></label></div><label>SECTION ORDER<input name="order" maxlength="2000" value="${escape(song.order||'')}" placeholder="Verse 1, Chorus, Verse 2, Chorus, Bridge, Chorus" aria-describedby="order-preview"></label><div id="order-preview" class="order-preview" aria-live="polite"></div><p class="help">Optional. Use headings, V1 / C / B, or section numbers separated by commas. Leave empty to follow the lyrics below.</p><label>LYRICS + CHORDS</label><textarea name="source" spellcheck="false" rows="13" placeholder="${escape(SONG_SYNTAX_EXAMPLE)}" required>${escape(song.source)}</textarea><p class="help">[Section] · [G]chords · # stage notes · blank line or --- for slide breaks. Two lyric lines per slide.</p><details class="syntax-guide"><summary>Syntax examples & previews</summary>${syntaxExamples()}<details><summary>Complete syntax reference</summary><pre>${escape(SONG_SYNTAX_EXAMPLE)}</pre></details></details><div class="editor-actions"><button class="btn outline" type="button" data-action="close-modal">Cancel</button><button class="btn primary" type="submit">Save song ${icon('check',17)}</button></div></form></div>`);
   }
   return '';
 }
@@ -214,6 +225,7 @@ function render(){
   if(held){el.appendChild(held);focused?.focus({preventScroll:true});if(selection)focused.setSelectionRange(...selection);}
   else if(isPerformance)el.insertAdjacentHTML('beforeend',modal());
   renderedModalKey=modalKey;
+  if(app.modal==='song-editor')updateOrderPreview();
   if(!$('#toast-root'))el.insertAdjacentHTML('beforeend','<div id="toast-root"></div>');renderToast();
   if(!app.follow && $('.lyrics-scroll'))$('.lyrics-scroll').scrollTop=keepScroll;
   if(app.follow && isPerformance && app.tab==='lyrics' && app.role!=='projector')followLive();
@@ -252,17 +264,18 @@ async function handleAction(btn){
   if(action==='next')await dispatch({kind:'step',dir:1});
   if(action==='blank')await dispatch({kind:'blank',value:!app.data.blank});
   if(action==='jump'){await dispatch({kind:'jump',index:Number(btn.dataset.song),section:Number(btn.dataset.section),page:Number(btn.dataset.page)});}
-  if(action==='go-song'){await dispatch({kind:'jump',index:Number(btn.dataset.index),section:0,page:0});app.tab='lyrics';render();}
+  if(action==='go-song'){await dispatch({kind:'take-song-live',index:Number(btn.dataset.index),section:0,page:0});app.tab='lyrics';render();}
   if(action==='return-live'){app.follow=true;render();followLive();}
-  if(action==='toggle-edit'){app.editingSet=!app.editingSet;render();}
+  if(action==='toggle-edit'){app.editingSet=!app.editingSet;if(app.editingSet)app.editSetId=app.data.activeSetId;render();}
+  if(action==='take-set-live'){await dispatch({kind:'activate-set',id:editingSet().id});app.editingSet=false;app.tab='lyrics';render();}
   if(action==='new-set'){app.modal='create-set';render();}
   if(action==='rename-set'){app.modal='rename-set';render();}
   if(action==='open-library'){app.modal='library';render();}
   if(action==='new-song'){app.editor=null;app.modal='song-editor';render();}
   if(action==='edit-song'){app.editor=app.data.library.find(x=>x.id===btn.dataset.id);app.modal='song-editor';render();}
-  if(action==='add-song'){await dispatch({kind:'add-to-set',id:btn.dataset.id});toast('Added to setlist.');}
-  if(action==='move'){await dispatch({kind:'move-in-set',index:Number(btn.dataset.index),dir:Number(btn.dataset.dir)});}
-  if(action==='remove'){await dispatch({kind:'remove-from-set',index:Number(btn.dataset.index)});}
+  if(action==='add-song'){await dispatch({kind:'add-to-set',setId:editingSet().id,id:btn.dataset.id});toast('Added to setlist.');}
+  if(action==='move'){await dispatch({kind:'move-in-set',setId:editingSet().id,index:Number(btn.dataset.index),dir:Number(btn.dataset.dir)});}
+  if(action==='remove'){await dispatch({kind:'remove-from-set',setId:editingSet().id,index:Number(btn.dataset.index)});}
   if(action==='copy-link')copyText(sessionLink());
   if(action==='open-projector'){
     if(app.screen==='demo'){toast('Projector tabs need a live session.');return;}
@@ -283,9 +296,9 @@ document.addEventListener('click',e=>{
 document.addEventListener('change',async e=>{
  try {
   if(e.target.name==='role'){app.pendingView=e.target.value;const slot=$('#join-password-slot');if(slot)slot.innerHTML=e.target.value==='control'?passwordField():'';}
-  if(e.target.matches('.set-position')){await dispatch({kind:'position-in-set',index:Number(e.target.dataset.positionIndex),position:Number(e.target.value)});}
+  if(e.target.matches('.set-position')){await dispatch({kind:'position-in-set',setId:editingSet().id,index:Number(e.target.dataset.positionIndex),position:Number(e.target.value)});}
   if(e.target.id==='chords-toggle'){app.showChords=e.target.checked;render();}
-  if(e.target.id==='set-select'){await dispatch({kind:'activate-set',id:e.target.value});}
+  if(e.target.id==='set-select'){app.editSetId=e.target.value;render();}
  }catch(error){toast(error.message);render();}
 });
 document.addEventListener('scroll',e=>{
@@ -305,10 +318,10 @@ document.addEventListener('submit',async e=>{
       app.password=String(values.password);app.peer.password=app.password;if(!app.peer.hostUuid)throw new Error('Host not connected yet. Try again once connected.');app.peer.send({kind:'auth',password:app.password},app.peer.hostUuid);
       app.role='control';app.modal='';render();
     }
-    if(formId==='create-set-form'){await dispatch({kind:'create-set',name:values.name});app.modal='';render();toast('Set created. Select it to go live.');}
-    if(formId==='rename-set-form'){await dispatch({kind:'rename-set',name:values.name});app.modal='';render();}
+    if(formId==='create-set-form'){await dispatch({kind:'create-set',name:values.name});app.modal='';render();toast('Set created. Select it to edit; Go live publishes it.');}
+    if(formId==='rename-set-form'){await dispatch({kind:'rename-set',setId:editingSet().id,name:values.name});app.modal='';render();}
     if(formId==='song-editor-form') {
-      const song=validSong(values);await dispatch({kind:'save-song',song});app.modal='library';app.editor=null;render();toast('Song saved.');
+      const song=validSong(values);await dispatch({kind:'save-song',song});app.modal='library';app.editor=null;render();toast('Saved to library. Go live / reload applies changes.');
     }
   }catch(error){toast(error.message||'Could not continue.');}
 });

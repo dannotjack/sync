@@ -134,3 +134,15 @@ Notes are neon green (#a8ff3e) against the monochrome interface. The song editor
 Use the Section order field to arrange a song: `Verse 1, Chorus, Verse 2, Chorus, Bridge, Chorus`, or `V1, C, V2, C, B, C`. Numbers refer to section positions in the source. Each section can be repeated. Empty order follows the source. Unknown or ambiguous names are rejected. Orders are saved with the song and included in backups.
 
 In Edit Setlist, type a song's new number to move it to that position. The currently live song and slide stay selected, including sets containing repeated songs.
+
+## Beta 5: prepare safely, then go live
+
+Sessions and imported libraries start blank. Go live reveals the current song; Back/Next can prepare the next slide while blank.
+
+`# Guitar only` is now a green stage note, not an invisible editing comment. Notes-only sections are playable and project black. Older brace-style notes still import and are converted to # when saved.
+
+The current section's notes remain in a panel outside the scrolling lyrics. The song editor previews typed section order immediately, including errors and repetitions.
+
+Song saves update the library without changing the current live song snapshot. Go live / reload explicitly applies saved changes. Edit set selects a preparation target without changing the active set; Go live with this set explicitly activates it. Reordering the live set retains its live song and slide.
+
+Refresh every connected device for Beta 5. The protocol is now lyrics-live/3 so older clients cannot accidentally project library edits instead of the frozen live song.

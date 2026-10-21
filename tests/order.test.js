@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {validSong,sampleState,applyAction,activeSong,validateImport} from '../src/model.js';
-const source='[Verse 1]\n{note: Softly}\n[G]One\n[Verse 2]\n[C]Two\n[Chorus]\n[D]Together\n[Bridge]\n[Em]Build';
+const source='[Verse 1]\n# Softly\n[G]One\n[Verse 2]\n[C]Two\n[Chorus]\n[D]Together\n[Bridge]\n[Em]Build';
 test('typed song order repeats sections with their notes and chords',()=>{
  const song=validSong({title:'Ordered',source,order:'V1, C, V2, C, B, C'});assert.deepEqual(song.sections.map(x=>x.name),['Verse 1','Chorus','Verse 2','Chorus','Bridge','Chorus']);assert.deepEqual(song.sections[0].notes,['Softly']);assert.equal(song.sections[1].pages[0][0],'[D]Together');assert.equal(new Set(song.sections.map(x=>x.id)).size,6);
 });

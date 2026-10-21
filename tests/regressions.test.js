@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {LyricsPeer} from '../src/sync.js';
 import {sampleState,applyAction,activeSong} from '../src/model.js';
-const proto='lyrics-live/2';
+const proto='lyrics-live/3';
 test('removing earlier song preserves live song and slide',()=>{
  let s=sampleState();s.cursor={song:1,section:0,page:1};s=applyAction(s,{kind:'remove-from-set',index:0});assert.equal(activeSong(s).id,'waters');assert.deepEqual(s.cursor,{song:0,section:0,page:1});assert.throws(()=>applyAction(s,{kind:'delete-song',id:'waters'}),/live song/);
 });

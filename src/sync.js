@@ -1,5 +1,5 @@
 /* VDO.Ninja data-only room adapter. Host is the only state authority. */
-const PROTOCOL = 'lyrics-live/2';
+const PROTOCOL = 'lyrics-live/3';
 const sleep = ms => new Promise(resolve=>setTimeout(resolve,ms));
 export class LyricsPeer {
   constructor({ code, isHost, password='', onState, onStatus, onCommand, onAuth, onPresence }) {
@@ -80,7 +80,7 @@ export class LyricsPeer {
       const c=message.cursor;
       if(!c||!['song','section','page'].every(k=>Number.isInteger(c[k])&&c[k]>=0)||!Number.isInteger(message.rev)||message.rev<=this.latestRevision)return;
       const next={...this.snapshot,cursor:c,blank:!!message.blank,rev:message.rev};
-      const set=next.sets.find(s=>s.id===next.activeSetId);const song=next.library.find(s=>s.id===set?.songs[c.song]);
+      const set=next.sets.find(s=>s.id===next.activeSetId);const id=set?.songs[c.song];const song=next.liveSong?.id===id?next.liveSong:next.library.find(s=>s.id===id);
       if(set?.songs.length&&!song?.sections[c.section]?.pages[c.page])return;
       this.snapshot=next;this.latestRevision=next.rev;this.onState?.(next);return;
     }

@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {LyricsPeer} from '../src/sync.js';
 import {sampleState,applyAction} from '../src/model.js';
-const proto='lyrics-live/2';
+const proto='lyrics-live/3';
 test('snapshot splits into chunks and reassembles only after all parts arrive',async()=>{
  const sent=[];const sample=sampleState();
  sample.library[0].source+=' X'.repeat(4000);
