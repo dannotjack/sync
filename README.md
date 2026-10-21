@@ -1,4 +1,4 @@
-# Lyrics Live · v1.0 beta
+# Sync Lyrics · v1.0 beta
 
 A **browser-hosted worship lyrics and chords system**. The host browser owns the songs and live slide position. Projector, Stage and Control connect using a six-character session code and VDO.Ninja's **data-only WebRTC** transport.
 
@@ -118,3 +118,11 @@ Controller permissions reset and authenticate again after disconnection. Command
 Removing earlier entries preserves the live song and slide. Removing or deleting the live song is blocked until another song is selected. Creating a set does not activate it; choosing a set explicitly takes it live. Saving edits to the live song updates its lyrics immediately.
 
 Open form nodes and fullscreen projector container survive live updates. Refresh all devices after this update: Beta 2 uses protocol lyrics-live/2.
+
+## Beta 3: stage notes and syntax
+
+The interface is now Sync Lyrics, with system-ui / -apple-system / Segoe UI typography matching Pad in a Box, a black and grey theme, yellow chords and green notes in Stage and Control. No logo is displayed.
+
+Use a standalone `{note: Guitar only}` line to add a note to its section. Notes are visible throughout that section in Stage and Control, never on Projector. `{comment: ...}` and `{c: ...}` are aliases. Notes do not consume lyric lines or create extra slides. `#` lines are editor comments and appear nowhere. Notes survive saves, backups and source roundtrips.
+
+The empty new-song field shows every supported syntax form, including section headings, chords, notes, comments, slide breaks, optional metadata and the supported ChordPro section delimiters. An expandable syntax guide remains available while typing. Metadata directives are ignored for projection; title, key and BPM are entered in the fields above.

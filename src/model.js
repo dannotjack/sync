@@ -10,7 +10,7 @@ export function parseSongText(source) {
   let slide = [];
   function begin(name) {
     flush();
-    current = { id: uid(), name: clean(name, 60) || 'Verse', pages: [] };
+    current = { id: uid(), name: clean(name, 60) || 'Verse', pages: [], notes: [] };
     sections.push(current);
   }
   function flush() {
@@ -20,6 +20,9 @@ export function parseSongText(source) {
   }
   for (const raw of String(source).replace(/\r\n?/g, '\n').slice(0, LIMIT).split('\n')) {
     const line = raw.trim();
+    if(line.startsWith('#'))continue;
+    const note=/^\{(?:note|comment|c):\s*(.*?)\}$/i.exec(line);
+    if(note){if(!current)begin('Verse 1');if(note[1])current.notes.push(note[1].slice(0,300));continue;}
     if (/^\{(?:title|subtitle|artist|key|tempo|time):/i.test(line)) continue;
     const chordOnly = /^\[([A-G](?:#|b)?(?:m|maj|dim|sus|add|aug|\d|\/|\+|\-|\(|\))*?)\]$/.test(line);
     const name = /^\[([^\]]+)\]$/.exec(line);
@@ -37,12 +40,12 @@ export function parseSongText(source) {
 }
 
 export function songToText(song) {
-  return (song?.sections || []).map(s => `[${s.name}]\n${s.pages.map(p => p.join('\n')).join('\n---\n')}`).join('\n\n');
+  return (song?.sections || []).map(s => `[${s.name}]\n${(s.notes||[]).map(n=>`{note: ${n}}\n`).join('')}${s.pages.map(p => p.join('\n')).join('\n---\n')}`).join('\n\n');
 }
 
 export function sampleState() {
   const library = [
-    { id: 'morning', title: 'Morning Light', key: 'G', bpm: 76, source: `[Verse 1]\n[G]When the morning [D]finds us here\n[Em]Hope is rising, [C]clear and near\n---\n[G]Every moment, [D]every breath\n[C]Held in kindness, [G]held in grace\n\n[Chorus]\n[C]Lead us on into the [G]light\n[D]Hold us through the [Em]darkest night\n---\n[C]Every voice and every [G]song\n[D]Sing of hope that [G]carries on\n\n[Bridge]\n[Em]We will not be [C]overcome\n[G]There's a new day [D]yet to come` },
+    { id: 'morning', title: 'Morning Light', key: 'G', bpm: 76, source: `[Verse 1]\n[G]When the morning [D]finds us here\n[Em]Hope is rising, [C]clear and near\n---\n[G]Every moment, [D]every breath\n[C]Held in kindness, [G]held in grace\n\n[Chorus]\n{note: Build gently; all voices in.}\n[C]Lead us on into the [G]light\n[D]Hold us through the [Em]darkest night\n---\n[C]Every voice and every [G]song\n[D]Sing of hope that [G]carries on\n\n[Bridge]\n[Em]We will not be [C]overcome\n[G]There's a new day [D]yet to come` },
     { id: 'waters', title: 'Still Waters', key: 'D', bpm: 68, source: `[Verse 1]\n[D]By the quiet [A]waters stay\n[Bm]Guide my restless [G]heart today\n---\n[D]When the road is [A]hard to see\n[G]Walk the winding [D]path with me\n\n[Chorus]\n[G]Peace like a river, [D]steady and deep\n[A]Love that will hold me, [Bm]love that will keep` },
     { id: 'new', title: 'All Things New', key: 'C', bpm: 80, source: `[Verse 1]\n[C]Here at the [G]turning of the tide\n[Am]Hope is [F]awakening inside\n\n[Chorus]\n[F]You make [C]all things new\n[G]The morning [Am]breaks through` }
   ].map(s => ({ ...s, sections: parseSongText(s.source) }));
@@ -196,3 +199,44 @@ export function chordSegments(input) {
   if(last<s.length || !segments.length) segments.push({chord,text:s.slice(last)});
   return segments;
 }
+
+// The editor's empty-field example lists the complete supported syntax.
+export const SONG_SYNTAX_EXAMPLE = `# Editor comments start with # and are never displayed.
+# Optional metadata (not projected; use the title/key/BPM fields above):
+{title: Song title}
+{subtitle: Optional subtitle}
+{artist: Artist name}
+{key: G}
+{tempo: 76}
+{time: 4/4}
+
+# Sections: any label in square brackets, e.g. Intro, Verse 1, Chorus, Bridge, Outro.
+[Verse 1]
+{note: Guitar only; enter after four counts.}
+[G]Your first lyric line [D/F#]continues here
+[Em7]Your second line [Csus4]continues here
+# Two lyric lines make one slide. Use --- or a blank line for an earlier break.
+---
+[G]A single-line slide
+
+[Chorus]
+{note: Build; repeat twice, then back to Verse 1.}
+[C]Chords go before words: [G/B]major, [Am]minor, [D7]seventh
+[Dsus4]Suspended, [F#dim]diminished, [Gadd9]added, [Bb]flat
+
+[Bridge]
+{comment: Stage note alias: comment}
+{c: Stage note alias: c}
+[Em]These notes appear in Stage and Control only
+[C]The projector shows lyrics without notes or chords
+
+# Alternative section syntax (each starts a new section):
+{start_of_verse: Verse 2}
+[G]Another verse line
+{end_of_verse}
+{start_of_chorus}
+[C]Another chorus line
+{end_of_chorus}
+{start_of_bridge: Final bridge}
+[D]Another bridge line
+{end_of_bridge}`;
