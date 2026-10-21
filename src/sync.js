@@ -1,5 +1,5 @@
 /* VDO.Ninja data-only room adapter. Host is the only state authority. */
-const PROTOCOL = 'lyrics-live/1';
+const PROTOCOL = 'lyrics-live/2';
 const sleep = ms => new Promise(resolve=>setTimeout(resolve,ms));
 export class LyricsPeer {
   constructor({ code, isHost, password='', onState, onStatus, onCommand, onAuth, onPresence }) {
@@ -7,7 +7,7 @@ export class LyricsPeer {
     this.onState=onState;this.onStatus=onStatus;this.onCommand=onCommand;this.onAuth=onAuth;this.onPresence=onPresence;
     this.sdk=null;this.hostUuid=null;this.authorized=new Set();this.peers=new Set();this.transfers=new Map();
     this.lastHostAt=0;this.timer=null;this.closed=false;this.authenticated=isHost;this.latestRevision=-1;
-    this.getSnapshot=null;
+    this.getSnapshot=null;this.snapshot=null;this.pending=new Map();this.commandResults=new Map();
   }
   report(value) { this.onStatus?.(value); }
   send(message,uuid) {
@@ -18,17 +18,18 @@ export class LyricsPeer {
     if(typeof window.VDONinjaSDK!=='function') throw new Error('The VDO.Ninja networking SDK could not load. Check your internet connection and try again.');
     this.sdk=new window.VDONinjaSDK({salt:'lyrics-live-v1',password:'lyrics-live-v1-room',autoRecover:true});
     this.sdk.addEventListener('connected',()=>this.report(this.isHost?'host-ready':'searching'));
-    this.sdk.addEventListener('disconnected',()=>this.report('disconnected'));
-    this.sdk.addEventListener('reconnecting',()=>this.report('reconnecting'));
+    this.sdk.addEventListener('disconnected',()=>{if(!this.isHost)this.resetHost();this.report('disconnected');});
+    this.sdk.addEventListener('reconnecting',()=>{if(!this.isHost)this.resetHost();else this.report('reconnecting');});
     this.sdk.addEventListener('reconnected',()=>this.report(this.isHost?'host-ready':'searching'));
     this.sdk.addEventListener('dataChannelOpen', e=>{
       const uuid=e.detail?.uuid;if(uuid)this.peers.add(uuid);
       this.onPresence?.(this.peers.size);
+      if(!this.isHost&&uuid===this.hostUuid){this.resetHost();}
       if(this.isHost) {this.send({kind:'beacon',host:true},uuid);this.sendSnapshot(uuid);}
       else this.send({kind:'hello'},uuid);
     });
-    this.sdk.addEventListener('dataChannelClose',e=>{if(e.detail?.uuid){this.peers.delete(e.detail.uuid);this.authorized.delete(e.detail.uuid);this.onPresence?.(this.peers.size);}});
-    this.sdk.addEventListener('peerDisconnected',e=>{if(e.detail?.uuid){this.peers.delete(e.detail.uuid);this.authorized.delete(e.detail.uuid);this.onPresence?.(this.peers.size);if(e.detail.uuid===this.hostUuid)this.report('reconnecting');}});
+    this.sdk.addEventListener('dataChannelClose',e=>{if(e.detail?.uuid){this.peers.delete(e.detail.uuid);this.authorized.delete(e.detail.uuid);this.onPresence?.(this.peers.size);if(e.detail.uuid===this.hostUuid)this.resetHost();}});
+    this.sdk.addEventListener('peerDisconnected',e=>{if(e.detail?.uuid){this.peers.delete(e.detail.uuid);this.authorized.delete(e.detail.uuid);this.onPresence?.(this.peers.size);if(e.detail.uuid===this.hostUuid)this.resetHost();}});
     this.sdk.addEventListener('dataReceived',e=>{this.receive(e.detail?.data,e.detail?.uuid);});
     this.report('connecting');
     await this.sdk.autoConnect({room:'lyrics_live_'+this.code,mode:'half',view:{audio:false,video:false},label:this.isHost?'Lyrics Host':'Lyrics Guest'});
@@ -36,7 +37,7 @@ export class LyricsPeer {
     this.report(this.isHost?'host-ready':'searching');
     this.timer=setInterval(()=>{
       if(this.isHost) this.send({kind:'beacon',host:true,rev:this.getSnapshot?.().rev});
-      else if(Date.now()-this.lastHostAt>14000) { this.report('searching');this.send({kind:'hello'}); }
+      else if(Date.now()-this.lastHostAt>14000) { this.resetHost();this.send({kind:'hello'}); }
     },5000);
   }
   receive(message,uuid) {
@@ -47,12 +48,19 @@ export class LyricsPeer {
       if(message.kind==='auth') {
         // Password travels ONLY to host over encrypted WebRTC; no public broadcast.
         const ok=typeof message.password==='string'&&message.password===this.password;
-        if(ok)this.authorized.add(uuid);
+        if(ok)this.authorized.add(uuid);else this.authorized.delete(uuid);
         this.send({kind:ok?'auth-ok':'auth-failed'},uuid);
       }
-      if(message.kind==='command' && this.authorized.has(uuid)) {
-        try {this.onCommand?.(message.command);}
-        catch(error){this.send({kind:'command-error',message:String(error?.message||error)},uuid);}
+      if(message.kind==='command') {
+        const id=message.id;
+        if(typeof id!=='string')return;
+        if(!this.authorized.has(uuid)){this.send({kind:'command-result',id,ok:false,message:'Controller disconnected. Unlock Control again.'},uuid);return;}
+        const key=uuid+':'+id;
+        if(this.commandResults.has(key)){this.commandResults.get(key).then(result=>this.send(result,uuid));return;}
+        const result=Promise.resolve().then(()=>this.onCommand?.(message.command)).then(()=>({kind:'command-result',id,ok:true}),error=>({kind:'command-result',id,ok:false,message:String(error?.message||error)}));
+        this.commandResults.set(key,result);
+        if(this.commandResults.size>1000)this.commandResults.delete(this.commandResults.keys().next().value);
+        result.then(reply=>this.send(reply,uuid));
       }
       return;
     }
@@ -66,6 +74,16 @@ export class LyricsPeer {
     }
     if(uuid!==this.hostUuid)return;
     this.lastHostAt=Date.now();this.report('connected');
+    if(message.kind==='command-result'){const pending=this.pending.get(message.id);if(pending){clearTimeout(pending.timer);this.pending.delete(message.id);if(message.ok)pending.resolve();else pending.reject(new Error(message.message||'Host rejected the change.'));}return;}
+    if(message.kind==='live') {
+      if(!this.snapshot||message.baseRev!==this.latestRevision){this.send({kind:'request-snapshot'},uuid);return;}
+      const c=message.cursor;
+      if(!c||!['song','section','page'].every(k=>Number.isInteger(c[k])&&c[k]>=0)||!Number.isInteger(message.rev)||message.rev<=this.latestRevision)return;
+      const next={...this.snapshot,cursor:c,blank:!!message.blank,rev:message.rev};
+      const set=next.sets.find(s=>s.id===next.activeSetId);const song=next.library.find(s=>s.id===set?.songs[c.song]);
+      if(set?.songs.length&&!song?.sections[c.section]?.pages[c.page])return;
+      this.snapshot=next;this.latestRevision=next.rev;this.onState?.(next);return;
+    }
     if(message.kind==='auth-ok') {this.authenticated=true;this.onAuth?.(true);}
     if(message.kind==='auth-failed') {this.authenticated=false;this.onAuth?.(false);}
     if(message.kind==='command-error') this.onStatus?.('error',message.message);
@@ -83,7 +101,7 @@ export class LyricsPeer {
         try {
           const snap=JSON.parse(t.chunks.join(''));
           if(snap && Array.isArray(snap.library) && Array.isArray(snap.sets) && Number(snap.rev)>=this.latestRevision) {
-            this.latestRevision=Number(snap.rev);this.onState?.(snap);
+            this.latestRevision=Number(snap.rev);this.snapshot=snap;this.onState?.(snap);
           }
         } catch(e){console.warn('Snapshot decode failed',e);}
       }
@@ -103,9 +121,29 @@ export class LyricsPeer {
       if(i%6===5)await sleep(20);
     }
   }
-  command(command) {if(this.isHost)this.onCommand?.(command);else if(this.hostUuid&&this.authenticated)this.send({kind:'command',command},this.hostUuid);}
+  resetHost(){
+    this.hostUuid=null;this.authenticated=false;this.latestRevision=-1;this.transfers.clear();
+    this.onAuth?.(false,'reconnecting');this.report('reconnecting');
+    for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(new Error('Connection lost. Check the live state before retrying.'));}this.pending.clear();
+  }
+  broadcastLive(baseRev){
+    if(!this.isHost)return;
+    const {rev,cursor,blank}=this.getSnapshot();
+    this.send({kind:'live',baseRev,rev,cursor,blank});
+  }
+  command(command) {
+    if(this.isHost)return Promise.resolve(this.onCommand?.(command));
+    if(!this.hostUuid||!this.authenticated)return Promise.reject(new Error('Host disconnected. Wait for reconnection.'));
+    const id=crypto.randomUUID();
+    return new Promise((resolve,reject)=>{
+      const timer=setTimeout(()=>{this.pending.delete(id);reject(new Error('Host did not confirm the change. Check before retrying.'));},10000);
+      this.pending.set(id,{resolve,reject,timer});
+      if(this.send({kind:'command',command,id},this.hostUuid)===false){clearTimeout(timer);this.pending.delete(id);reject(new Error('Change could not be sent.'));}
+    });
+  }
   async close() {
     this.closed=true;
+    for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(new Error('Session closed.'));}this.pending.clear();
     if(this.timer)clearInterval(this.timer);
     if(this.sdk){try{await this.sdk.disconnect();}catch(e){console.warn(e);}}
     this.sdk=null;

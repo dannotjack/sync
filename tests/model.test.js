@@ -15,7 +15,7 @@ test('blank preserves current slide and can be toggled',()=>{
 test('section and slide jumps and setlist edit',()=>{
  let s=sampleState();s=applyAction(s,{kind:'jump',index:0,section:0,page:1});assert.deepEqual(s.cursor,{song:0,section:0,page:1});
  s=applyAction(s,{kind:'move-in-set',index:0,dir:1});assert.equal(s.sets[0].songs[1],'morning');assert.equal(s.cursor.song,1);
- s=applyAction(s,{kind:'remove-from-set',index:1});assert.equal(s.sets[0].songs.length,2);
+ assert.throws(()=>applyAction(s,{kind:'remove-from-set',index:1}),/live song/);s=applyAction(s,{kind:'remove-from-set',index:0});assert.equal(s.sets[0].songs.length,2);assert.equal(activeSong(s).id,'morning');
 });
 test('ChordPro inline parsing and roundtrip',()=>{
  const source='[Verse 1]\n[G]Hello [D]world\n[Em]Carry [C]on\n---\n[G]Another [D]part\n[C]This is [G]fine\n\n[Chorus]\n[C]Sing the [G]song';

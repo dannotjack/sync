@@ -1,5 +1,5 @@
-import { STORAGE_KEY, sampleState, validateImport, validSong, songToText, applyAction, activeSet, activeSong, activeSection, atStart, atEnd, chordSegments } from './model.js';
-import { LyricsPeer } from './sync.js';
+import { STORAGE_KEY, sampleState, validateImport, validSong, songToText, applyAction, activeSet, activeSong, activeSection, atStart, atEnd, chordSegments } from './model.js?v=beta2';
+import { LyricsPeer } from './sync.js?v=beta2';
 const $ = (query, root=document) => root.querySelector(query);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icon = (name, size=20) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${({
@@ -50,7 +50,7 @@ const params=new URLSearchParams(location.search);
 const app={
   screen:'welcome',isHost:false,code:'',password:'',role:'control',authorized:false,
   data:null,peer:null,status:'idle',peers:0,tab:'lyrics',editingSet:false,editor:null,
-  showInvite:false,showProjectorTools:false,showChords:true,font:1,projectorFont:2,follow:true,
+  showInvite:false,showReadingOptions:false,showProjectorTools:false,showChords:true,font:1,projectorFont:2,follow:true,
   scrollTop:0,programScroll:false,modal:'',message:'',pendingCode:(params.get('join')||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6),
   pendingView:params.get('view')||'',connectLock:false
 };
@@ -62,17 +62,16 @@ function indicator(){const ok=app.isHost?app.status==='host-ready':app.status===
 function currentSong(){return activeSong(app.data);}
 function setName(){return activeSet(app.data)?.name||'Untitled set';}
 function canControl(){return app.isHost||app.authorized;}
-function dispatch(action){
-  if(!canControl()){toast('Controller password required.');return;}
-  if(!app.peer && app.screen!=='demo'){toast('Session not ready.');return;}
+async function dispatch(action){
+  if(!canControl())throw new Error('Controller password required.');
+  if(!app.data)throw new Error('Waiting for the host.');
+  if(!app.peer && app.screen!=='demo')throw new Error('Session not ready.');
   if(app.isHost || app.screen==='demo') {
-    try {
-      app.data=applyAction(app.data,action);persist();render();
-      app.peer?.sendSnapshot();
-    }catch(e){toast(e.message||'Could not update.');}
-  }else{
-    app.peer?.command(action);
-  }
+    const prior=app.data;
+    app.data=applyAction(prior,action);persist();render();
+    if(['step','jump','blank'].includes(action.kind))app.peer?.broadcastLive(prior.rev);
+    else app.peer?.sendSnapshot();
+  }else await app.peer.command(action);
 }
 async function startSession({host,code,password,role,name=''}){
   if(app.connectLock)return;
@@ -86,7 +85,7 @@ async function startSession({host,code,password,role,name=''}){
     onStatus:(value,detail)=>{app.status=value;if(detail)toast(detail);renderStatus();},
     onState:snap=>{const prior=app.data?.cursor;app.data=snap;render();if(!prior||JSON.stringify(prior)!==JSON.stringify(snap.cursor))followLive();},
     onCommand:action=>dispatch(action),
-    onAuth:ok=>{app.authorized=ok;if(!ok){app.modal='auth';toast('Incorrect controller password.');}else app.modal='';render();},
+    onAuth:(ok,reason)=>{app.authorized=ok;if(!ok&&reason!=='reconnecting'){app.modal='auth';toast('Incorrect controller password.');}else if(ok&&app.modal==='auth')app.modal='';render();},
     onPresence:n=>{app.peers=n;renderStatus();}
   });
   peer.getSnapshot=()=>app.data;
@@ -106,23 +105,18 @@ function jumpLocal(role){
 }
 function renderStatus(){const el=$('#connection-slot');if(el)el.innerHTML=indicator();const c=$('#peer-count');if(c)c.textContent=`${app.peers} connected`;}
 function logo(){return `<span class="brand-mark">${icon('music',23)}</span><span class="brand-name">lyrics<span>live</span></span>`;}
-function welcome(){return `<div class="welcome-shell"><header class="welcome-top"><div class="brand">${logo()}</div><span class="welcome-top-note">Simple lyrics. Everyone in sync.</span></header><main class="welcome-main">
-   <div class="eyebrow"><span class="shine"></span> LIVE WORSHIP MADE SIMPLE</div>
-   <h1>All the words.<br><em>In the right place.</em></h1>
-   <p class="intro">One session for your projector, singers and musicians. Everyone follows together, straight from their browser.</p>
-   <div class="welcome-actions">
-    <div class="welcome-card primary-card"><span class="card-icon">${icon('plus',23)}</span><h2>Create a session</h2><p>Host from this computer, build your set and invite your team.</p><button class="btn primary wide" data-action="show-create">Create session ${icon('right',18)}</button></div>
-    <div class="welcome-card"><span class="card-icon secondary-icon">${icon('link',23)}</span><h2>Join a session</h2><p>Have a code? Get connected in a few seconds.</p><form id="join-form"><label for="join-code">SESSION CODE</label><div class="join-inline"><input id="join-code" name="code" class="code-input" placeholder="A7K92B" maxlength="6" autocomplete="off" autocapitalize="characters" value="${escape(app.pendingCode)}" required><button class="btn subtle" type="submit">Join ${icon('right',17)}</button></div></form></div>
-   </div><button class="demo-link" data-action="preview">Preview the interface with sample songs ${icon('right',15)}</button>
-   </main><footer class="welcome-footer"><span>${icon('monitor',16)} Works on projectors, tablets and phones</span><span>Browser-to-browser • No cloud song database</span></footer>
-  </div>`;}
-function createView(){return `<div class="welcome-shell"><header class="welcome-top"><div class="brand">${logo()}</div><button class="quiet-btn" data-action="home">${icon('left',16)} Back</button></header><main class="form-shell"><div class="eyebrow">NEW SESSION</div><h1 class="form-title">Let's get ready.</h1><p class="intro">This browser will host the session. Keep it awake while your team is using the lyrics.</p><form id="create-form" class="form-card">
+function welcome(){return `<div class="welcome-shell"><header class="welcome-top"><div class="brand">${logo()}</div><span class="beta-label">v1.0 Beta</span></header><main class="welcome-main minimal-home">
+<h1>Lyrics Live</h1><p class="intro">Projector · Stage · Control</p>
+<button class="btn primary wide large" data-action="show-create">Create session ${icon('plus',18)}</button>
+<div class="home-divider">or join</div><form id="join-form"><label for="join-code">SESSION CODE</label><div class="join-inline"><input id="join-code" name="code" class="code-input" placeholder="A7K92B" maxlength="6" autocomplete="off" autocapitalize="characters" value="${escape(app.pendingCode)}" required><button class="btn outline" type="submit">Join ${icon('right',17)}</button></div></form>
+<button class="demo-link" data-action="preview">Try demo ${icon('right',15)}</button></main></div>`;}
+function createView(){return `<div class="welcome-shell"><header class="welcome-top"><div class="brand">${logo()}</div><button class="quiet-btn" data-action="home">${icon('left',16)} Back</button></header><main class="form-shell"><h1 class="form-title">Create session</h1><p class="intro">Keep this browser open and this device awake.</p><form id="create-form" class="form-card">
   <label for="create-name">SESSION NAME</label><input id="create-name" name="name" value="Sunday Worship" maxlength="80" required>
   <label for="create-password">CONTROL PASSWORD</label><input id="create-password" name="password" type="password" minlength="6" maxlength="100" autocomplete="new-password" placeholder="At least 6 characters" required>
   <p class="help">The password is for additional controllers. Stage and Projector don't need it.</p>
-  <div class="form-note">${icon('monitor',20)} <span>Projector-hosted mode — no server installation. Dedicated server mode is planned for V3.</span></div>
+
   <button type="submit" class="btn primary wide large">Start session ${icon('right',18)}</button></form></main></div>`;}
-function joinView(){return `<div class="welcome-shell"><header class="welcome-top"><div class="brand">${logo()}</div><button class="quiet-btn" data-action="home">${icon('left',16)} Back</button></header><main class="form-shell"><div class="eyebrow">JOIN SESSION</div><h1 class="form-title">You're almost in.</h1><p class="intro">Choose the view for this device. Projector and Stage are open to everyone with the session code.</p><form id="join-role-form" class="form-card">
+function joinView(){return `<div class="welcome-shell"><header class="welcome-top"><div class="brand">${logo()}</div><button class="quiet-btn" data-action="home">${icon('left',16)} Back</button></header><main class="form-shell"><h1 class="form-title">Join session</h1><form id="join-role-form" class="form-card">
    <label for="role-code">SESSION CODE</label><input id="role-code" class="code-input" name="code" value="${escape(app.pendingCode)}" maxlength="6" required autocapitalize="characters" autocomplete="off">
    <label>YOUR VIEW</label><div class="role-picks">
     ${[['projector','monitor','Projector','Lyrics only'],['stage','music','Stage','Lyrics + chords'],['control','controls','Control','Manage the slides']].map(([v,i,n,d])=>`<label class="role-pick"><input type="radio" name="role" value="${v}" ${app.pendingView===v || (!app.pendingView&&v==='stage')?'checked':''}><span class="role-pick-content">${icon(i,23)}<strong>${n}</strong><small>${d}</small></span></label>`).join('')}
@@ -136,7 +130,7 @@ function topbar(){return `<header class="app-header"><div class="app-header-left
 function viewNav(){return `<div class="view-nav"><div class="view-segments">${[['projector','monitor','Projector'],['stage','music','Stage'],['control','controls','Control']].map(([v,ic,label])=>`<button class="view-button ${app.role===v?'selected':''}" data-action="view" data-view="${v}">${icon(ic,17)}<span>${label}</span>${v==='control'&&!canControl()?icon('lock',12):''}</button>`).join('')}</div></div>`;}
 function bodyHeader(){
   const s=currentSong();const set=activeSet(app.data);const blank=app.data?.blank;
-  return `<div class="song-header"><div><div class="breadcrumb">${escape(app.data?.sessionName||set?.name||'Setlist')} <span> / </span> <strong>${escape(s?.title||'No song selected')}</strong></div><h1>${escape(s?.title||'No song selected')}</h1><div class="song-meta">${s?`<span>Key <b>${escape(s.key||'—')}</b></span>${s.bpm?`<span>${s.bpm} BPM</span>`:''}<span>Song ${app.data.cursor.song+1} of ${set?.songs.length||0}</span>`:''}</div></div><span class="live-badge ${blank?'is-blank':''}"><span class="status-dot"></span>${blank?'BLANK':'LIVE'}</span></div>`;
+  return `<div class="song-header"><div><h1>${escape(s?.title||'No song selected')}</h1><div class="song-meta">${s?`<span>Key <b>${escape(s.key||'—')}</b></span>${s.bpm?`<span>${s.bpm} BPM</span>`:''}<span>Song ${app.data.cursor.song+1} of ${set?.songs.length||0}</span>`:''}</div></div><span class="live-badge ${blank?'is-blank':''}"><span class="status-dot"></span>${blank?'BLANK':'LIVE'}</span></div>`;
 }
 function songTabs(){return `<div class="song-tabs"><button class="song-tab ${app.tab==='lyrics'?'active':''}" data-action="tab" data-tab="lyrics">${icon('music',17)} Lyrics & chords</button><button class="song-tab ${app.tab==='setlist'?'active':''}" data-action="tab" data-tab="setlist">${icon('list',17)} Setlist</button></div>`;}
 function lineMarkup(line){
@@ -146,7 +140,7 @@ function lineMarkup(line){
 function lyricsView(){
   const s=currentSong(), cursor=app.data?.cursor, control=app.role==='control'&&canControl();
   if(!s)return `<div class="empty-lyrics">${icon('music',36)}<h2>This set is empty</h2><p>Open Setlist to add your first song.</p></div>`;
-  return `<div class="reading-options"><label class="toggle-label"><input type="checkbox" id="chords-toggle" ${app.showChords?'checked':''}><span>Show chords</span></label><div class="font-controls"><button class="small-icon" data-action="font-less" aria-label="Smaller lyrics" ${app.font===0?'disabled':''}>${icon('minus',16)}</button><span>Aa</span><button class="small-icon" data-action="font-more" aria-label="Larger lyrics" ${app.font===2?'disabled':''}>${icon('plus',16)}</button></div></div>
+  return `<div class="reading-toolbar"><button class="quiet-btn" data-action="reading-options" aria-expanded="${app.showReadingOptions}">${icon('settings',16)} Display</button></div><div class="reading-options" ${app.showReadingOptions?'':'hidden'}><label class="toggle-label"><input type="checkbox" id="chords-toggle" ${app.showChords?'checked':''}><span>Show chords</span></label><div class="font-controls"><button class="small-icon" data-action="font-less" aria-label="Smaller lyrics" ${app.font===0?'disabled':''}>${icon('minus',16)}</button><span>Aa</span><button class="small-icon" data-action="font-more" aria-label="Larger lyrics" ${app.font===2?'disabled':''}>${icon('plus',16)}</button></div></div>
   <div class="lyrics-scroll font-${app.font}" id="lyrics-scroll">${s.sections.map((section,si)=>`<div class="section-card ${si===cursor.section?'current':''}"><button class="section-heading ${control?'actionable':''}" ${control?`data-action="jump" data-song="${cursor.song}" data-section="${si}" data-page="0"`:''}><span>${escape(section.name)}</span>${si===cursor.section?'<small>CURRENT SECTION</small>':''}${control?icon('right',16):''}</button>
   ${section.pages.map((page,pi)=>{const isLive=si===cursor.section&&pi===cursor.page;return `<${control?'button':'div'} class="lyric-slide ${isLive?'on-air':''} ${control?'actionable':''}" ${control?`data-action="jump" data-song="${cursor.song}" data-section="${si}" data-page="${pi}"`:''} ${isLive?'data-current-slide="true"':''}><div class="slide-lines">${page.map(lineMarkup).join('')}</div>${isLive?`<span class="onair-text">${icon('monitor',14)} ON PROJECTOR</span>`:''}</${control?'button':'div'}>`;}).join('')}</div>`).join('')}</div><button class="return-to-live" id="return-to-live" data-action="return-live" ${app.follow?'hidden':''}>${icon('monitor',15)} Return to live</button>`;
 }
@@ -157,10 +151,10 @@ function setlistView(){
    ${editing?`<div class="editing-tools"><label>Switch set <select id="set-select" data-action="set-select">${app.data.sets.map(st=>`<option value="${escape(st.id)}" ${st.id===set.id?'selected':''}>${escape(st.name)}</option>`).join('')}</select></label><button data-action="new-set" class="btn outline small">${icon('plus',15)} New set</button><button data-action="rename-set" class="btn outline small">Rename</button><button data-action="open-library" class="btn outline small">${icon('library',15)} Song library</button></div>`:''}
    <div class="setlist-rows">${(set?.songs||[]).length?set.songs.map((id,i)=>{const song=library.find(x=>x.id===id);if(!song)return '';return `<div class="set-row ${i===current?'active':''}"><span class="track-number">${String(i+1).padStart(2,'0')}</span><div class="set-row-copy"><strong>${escape(song.title)}</strong><span>${escape(song.key||'—')} ${i===current?'· ON AIR':''}</span></div>${editing?`<div class="mini-actions"><button data-action="move" data-index="${i}" data-dir="-1" title="Move up" ${i===0?'disabled':''}>${icon('arrowUp',17)}</button><button data-action="move" data-index="${i}" data-dir="1" title="Move down" ${i===set.songs.length-1?'disabled':''}>${icon('arrowDown',17)}</button><button data-action="remove" data-index="${i}" title="Remove from set">${icon('close',17)}</button></div>`:app.role==='control'&&canControl()?`<button class="btn outline small" data-action="go-song" data-index="${i}">${i===current?'Restart':'Go live'}</button>`:i===current?`<span class="live-mark">${icon('monitor',17)}</span>`:''}</div>`;}).join(''):`<div class="empty-list">No songs yet. Add one from the library.</div>`}</div>
    ${editing?`<button class="add-song-button" data-action="open-library">${icon('plus',18)} Add songs from library</button>`:''}
-   ${app.role==='control'&&canControl()&&!editing?`<p class="setlist-helper">Tap “Go live” to switch songs. Editing won't change what's projected until you choose a live song.</p>`:''}
+   ${app.role==='control'&&canControl()&&!editing?`<p class="setlist-helper">Tap “Go live” to switch songs. Reordering keeps the live song. Switch songs before removing the live song.</p>`:''}
   </div>`;
 }
-function controlDock(){if(app.role!=='control'||!canControl())return '';
+function controlDock(){if(!app.data||app.role!=='control'||!canControl())return '';
   const s=app.data,c=app.data.cursor,part=activeSection(s);
   return `<div class="control-dock"><div class="dock-caption"><span><b>${escape(part?.name||'No section')}</b>${part?` <span class="caption-sep">·</span> Slide ${c.page+1} / ${part.pages.length}`:''}</span><span class="controller-indicator">${icon('controls',15)} LIVE CONTROL</span></div>
    <div class="dock-buttons"><button class="dock-button back" data-action="back" ${atStart(s)?'disabled':''}>${icon('left',26)}<strong>Back</strong></button><button class="dock-button next" data-action="next" ${atEnd(s)?'disabled':''}><strong>Next</strong>${icon('right',26)}</button><button class="dock-button blank ${s.blank?'active':''}" data-action="blank">${icon(s.blank?'show':'blank',25)}<strong>${s.blank?'Show':'Blank'}</strong></button></div></div>`;
@@ -187,12 +181,25 @@ function modal(){if(app.showInvite && (app.screen==='session'||app.screen==='dem
   return '';
 }
 function inviteModal(){return `<div class="modal-backdrop" data-action="close-invite"><div class="modal-card" role="dialog" aria-modal="true" ><button class="icon-button close-modal" data-action="close-invite" aria-label="Close">${icon('close')}</button><div class="overline">YOUR LIVE SESSION</div><h2>Invite your team</h2><p>Open the same website on another device and enter the code. Or share the link.</p><div class="code-display">${escape(app.code)}</div><div class="invite-link">${escape(sessionLink())}</div><div class="invite-actions"><button class="btn primary" data-action="copy-link">${icon('link',16)} Copy invite link</button><button class="btn outline" data-action="open-projector">${icon('external',16)} Open projector tab</button></div><div class="modal-note">${app.screen==='demo'?'Demo mode does not connect to other devices.':'Keep the host browser open and prevent the computer from sleeping.'}</div><div class="modal-divider"></div><div class="backups"><button data-action="export">${icon('download',18)} Export backup</button>${app.isHost?`<button data-action="import">${icon('upload',18)} Import backup</button>`:''}</div><button class="btn outline wide" data-action="leave">${icon('left',17)} ${app.isHost?'End host session':'Leave session'}</button></div></div>`;}
+let renderedModalKey='';
 function render(){
   const el=$('#app');if(!el)return;
   const isPerformance=(app.screen==='session'||app.screen==='demo');
   const keepScroll=app.tab==='lyrics' && app.role!=='projector' && !app.follow ? ($('.lyrics-scroll')?.scrollTop??app.scrollTop):0;
-  el.innerHTML= app.screen==='welcome'?welcome():app.screen==='create'?createView():app.screen==='join'?joinView():app.role==='projector'?projectorScreen():stageScreen();
-  if(isPerformance)el.insertAdjacentHTML('beforeend',modal());
+  const modalKey=isPerformance?(app.showInvite?'invite':app.modal):'';
+  const held=modalKey&&modalKey===renderedModalKey?$('.modal-backdrop'):null;
+  const focused=held?.contains(document.activeElement)?document.activeElement:null;
+  const selection=focused&&typeof focused.selectionStart==='number'?[focused.selectionStart,focused.selectionEnd]:null;
+  if(held)held.remove();
+  const projector=isPerformance&&app.role==='projector'?$('#projector-shell'):null;
+  if(projector){
+    const tmp=document.createElement('div');tmp.innerHTML=projectorScreen();
+    projector.innerHTML=tmp.firstElementChild.innerHTML;
+    el.querySelectorAll('.modal-backdrop,#toast-root').forEach(n=>n.remove());
+  }else el.innerHTML= app.screen==='welcome'?welcome():app.screen==='create'?createView():app.screen==='join'?joinView():app.role==='projector'?projectorScreen():stageScreen();
+  if(held){el.appendChild(held);focused?.focus({preventScroll:true});if(selection)focused.setSelectionRange(...selection);}
+  else if(isPerformance)el.insertAdjacentHTML('beforeend',modal());
+  renderedModalKey=modalKey;
   if(!$('#toast-root'))el.insertAdjacentHTML('beforeend','<div id="toast-root"></div>');renderToast();
   if(!app.follow && $('.lyrics-scroll'))$('.lyrics-scroll').scrollTop=keepScroll;
   if(app.follow && isPerformance && app.tab==='lyrics' && app.role!=='projector')followLive();
@@ -219,6 +226,7 @@ async function handleAction(btn){
   if(action==='view'){jumpLocal(btn.dataset.view);}
   if(action==='tab'){app.tab=btn.dataset.tab;app.follow=true;app.scrollTop=0;render();}
   if(action==='chords-toggle'){app.showChords=!app.showChords;render();}
+  if(action==='reading-options'){app.showReadingOptions=!app.showReadingOptions;render();}
   if(action==='font-less'){app.font=Math.max(0,app.font-1);render();}
   if(action==='font-more'){app.font=Math.min(2,app.font+1);render();}
   if(action==='projector-font-less'){app.projectorFont=Math.max(0,app.projectorFont-1);render();}
@@ -226,11 +234,11 @@ async function handleAction(btn){
   if(action==='projection-options'){app.showProjectorTools=!app.showProjectorTools;render();}
   if(action==='projector-return'){if(app.isHost||app.authorized)jumpLocal('control');else jumpLocal('stage');}
   if(action==='fullscreen'){const el=$('#projector-shell');if(document.fullscreenElement)await document.exitFullscreen();else await el?.requestFullscreen?.();}
-  if(action==='back')dispatch({kind:'step',dir:-1});
-  if(action==='next')dispatch({kind:'step',dir:1});
-  if(action==='blank')dispatch({kind:'blank',value:!app.data.blank});
-  if(action==='jump'){dispatch({kind:'jump',index:Number(btn.dataset.song),section:Number(btn.dataset.section),page:Number(btn.dataset.page)});}
-  if(action==='go-song'){dispatch({kind:'jump',index:Number(btn.dataset.index),section:0,page:0});app.tab='lyrics';render();}
+  if(action==='back')await dispatch({kind:'step',dir:-1});
+  if(action==='next')await dispatch({kind:'step',dir:1});
+  if(action==='blank')await dispatch({kind:'blank',value:!app.data.blank});
+  if(action==='jump'){await dispatch({kind:'jump',index:Number(btn.dataset.song),section:Number(btn.dataset.section),page:Number(btn.dataset.page)});}
+  if(action==='go-song'){await dispatch({kind:'jump',index:Number(btn.dataset.index),section:0,page:0});app.tab='lyrics';render();}
   if(action==='return-live'){app.follow=true;render();followLive();}
   if(action==='toggle-edit'){app.editingSet=!app.editingSet;render();}
   if(action==='new-set'){app.modal='create-set';render();}
@@ -238,9 +246,9 @@ async function handleAction(btn){
   if(action==='open-library'){app.modal='library';render();}
   if(action==='new-song'){app.editor=null;app.modal='song-editor';render();}
   if(action==='edit-song'){app.editor=app.data.library.find(x=>x.id===btn.dataset.id);app.modal='song-editor';render();}
-  if(action==='add-song'){dispatch({kind:'add-to-set',id:btn.dataset.id});toast('Added to setlist.');}
-  if(action==='move'){dispatch({kind:'move-in-set',index:Number(btn.dataset.index),dir:Number(btn.dataset.dir)});}
-  if(action==='remove'){dispatch({kind:'remove-from-set',index:Number(btn.dataset.index)});}
+  if(action==='add-song'){await dispatch({kind:'add-to-set',id:btn.dataset.id});toast('Added to setlist.');}
+  if(action==='move'){await dispatch({kind:'move-in-set',index:Number(btn.dataset.index),dir:Number(btn.dataset.dir)});}
+  if(action==='remove'){await dispatch({kind:'remove-from-set',index:Number(btn.dataset.index)});}
   if(action==='copy-link')copyText(sessionLink());
   if(action==='open-projector'){
     if(app.screen==='demo'){toast('Projector tabs need a live session.');return;}
@@ -258,10 +266,12 @@ document.addEventListener('click',e=>{
   if(btn.matches('.modal-backdrop')&&e.target!==btn)return;
   e.preventDefault();handleAction(btn).catch(err=>toast(err.message||'Action failed.'));
 });
-document.addEventListener('change',e=>{
+document.addEventListener('change',async e=>{
+ try {
   if(e.target.name==='role'){app.pendingView=e.target.value;const slot=$('#join-password-slot');if(slot)slot.innerHTML=e.target.value==='control'?passwordField():'';}
   if(e.target.id==='chords-toggle'){app.showChords=e.target.checked;render();}
-  if(e.target.id==='set-select'){dispatch({kind:'activate-set',id:e.target.value});}
+  if(e.target.id==='set-select'){await dispatch({kind:'activate-set',id:e.target.value});}
+ }catch(error){toast(error.message);}
 });
 document.addEventListener('scroll',e=>{
   if(e.target.id==='lyrics-scroll'&&!app.programScroll){app.scrollTop=e.target.scrollTop;app.follow=false;const b=$('#return-to-live');if(b)b.hidden=false;}
@@ -280,20 +290,22 @@ document.addEventListener('submit',async e=>{
       app.password=String(values.password);app.peer.password=app.password;if(!app.peer.hostUuid)throw new Error('Host not connected yet. Try again once connected.');app.peer.send({kind:'auth',password:app.password},app.peer.hostUuid);
       app.role='control';app.modal='';render();
     }
-    if(formId==='create-set-form'){dispatch({kind:'create-set',name:values.name});app.modal='';render();}
-    if(formId==='rename-set-form'){dispatch({kind:'rename-set',name:values.name});app.modal='';render();}
+    if(formId==='create-set-form'){await dispatch({kind:'create-set',name:values.name});app.modal='';render();toast('Set created. Select it to go live.');}
+    if(formId==='rename-set-form'){await dispatch({kind:'rename-set',name:values.name});app.modal='';render();}
     if(formId==='song-editor-form') {
-      const song=validSong(values);dispatch({kind:'save-song',song});app.modal='library';app.editor=null;render();toast('Song saved.');
+      const song=validSong(values);await dispatch({kind:'save-song',song});app.modal='library';app.editor=null;render();toast('Song saved.');
     }
   }catch(error){toast(error.message||'Could not continue.');}
 });
-document.addEventListener('keydown',e=>{
+document.addEventListener('keydown',async e=>{
   const editable=e.target.closest('input,textarea,select,[contenteditable="true"]');
   if(e.key==='Escape'&&(app.modal||app.showInvite)){app.modal='';app.showInvite=false;render();return;}
-  if(editable||app.modal||app.showInvite||!canControl()||(app.screen!=='session'&&app.screen!=='demo'))return;
-  if(e.key==='ArrowRight'||e.key==='ArrowDown'){e.preventDefault();dispatch({kind:'step',dir:1});}
-  if(e.key==='ArrowLeft'||e.key==='ArrowUp'){e.preventDefault();dispatch({kind:'step',dir:-1});}
-  if(e.key.toLowerCase()==='b'){e.preventDefault();dispatch({kind:'blank',value:!app.data.blank});}
+  if(editable||!app.data||app.modal||app.showInvite||!canControl()||(app.screen!=='session'&&app.screen!=='demo'))return;
+  try {
+  if(e.key==='ArrowRight'||e.key==='ArrowDown'){e.preventDefault();await dispatch({kind:'step',dir:1});}
+  if(e.key==='ArrowLeft'||e.key==='ArrowUp'){e.preventDefault();await dispatch({kind:'step',dir:-1});}
+  if(e.key.toLowerCase()==='b'){e.preventDefault();await dispatch({kind:'blank',value:!app.data.blank});}
+  }catch(error){toast(error.message);}
 });
 const backupInput=document.createElement('input');backupInput.id='backup-input';backupInput.type='file';backupInput.accept='.json,application/json';backupInput.hidden=true;document.body.appendChild(backupInput);
 backupInput.addEventListener('change',async()=>{

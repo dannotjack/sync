@@ -108,3 +108,13 @@ Run pure model tests with `npm test` (Node 20+). **No `npm install` is needed.**
 ### Acknowledgments
 
 Uses the [VDO.Ninja JavaScript SDK](https://sdk.vdo.ninja/) hosted by its maintainers; SDK core is MPL-2.0. This application is not affiliated with VDO.Ninja.
+
+## Beta 2 update
+
+Home shows Create session, Join and Try demo. Display settings are collapsed. Projector settings open only when selected.
+
+Controller permissions reset and authenticate again after disconnection. Commands wait for host acknowledgement, reject on timeout or loss, and are deduplicated. Navigation uses compact revision-checked updates; joins, edits and missed revisions use full snapshots.
+
+Removing earlier entries preserves the live song and slide. Removing or deleting the live song is blocked until another song is selected. Creating a set does not activate it; choosing a set explicitly takes it live. Saving edits to the live song updates its lyrics immediately.
+
+Open form nodes and fullscreen projector container survive live updates. Refresh all devices after this update: Beta 2 uses protocol lyrics-live/2.

@@ -121,8 +121,11 @@ export function applyAction(state, action) {
     case 'delete-song': {
       const id=clean(action.id,120);
       if(!s.library.some(x=>x.id===id)) break;
+      if(activeSong(s)?.id===id) throw new Error('Choose another live song before deleting this song.');
+      const liveId=activeSong(s)?.id;
       s.library=s.library.filter(x=>x.id!==id);
       for(const st of s.sets) st.songs=st.songs.filter(x=>x!==id);
+      if(liveId)s.cursor.song=Math.max(0,set().songs.indexOf(liveId));
       clampCursor(); break;
     }
     case 'add-to-set': {
@@ -131,7 +134,11 @@ export function applyAction(state, action) {
       clampCursor(); break;
     }
     case 'remove-from-set': {
-      if(Number.isInteger(i)&&i>=0&&i<set().songs.length) set().songs.splice(i,1);
+      if(Number.isInteger(i)&&i>=0&&i<set().songs.length) {
+        if(i===s.cursor.song) throw new Error('Choose another live song before removing this song.');
+        set().songs.splice(i,1);
+        if(i<s.cursor.song)s.cursor.song--;
+      }
       clampCursor(); break;
     }
     case 'move-in-set': {
@@ -147,8 +154,7 @@ export function applyAction(state, action) {
       if(s.sets.length>=50) break;
       const name=clean(action.name,80);
       if(!name) throw new Error('Give the new set a name.');
-      const fresh={id:uid(),name,songs:[]}; s.sets.push(fresh); s.activeSetId=fresh.id;
-      s.cursor={song:0,section:0,page:0};s.blank=false;break;
+      const fresh={id:uid(),name,songs:[]}; s.sets.push(fresh);break;
     }
     case 'rename-set': {
       const name=clean(action.name,80);
