@@ -69,12 +69,30 @@ export function atEnd(s) {
 }
 export function atStart(s) { return s.cursor.song===0 && s.cursor.section===0 && s.cursor.page===0; }
 
+export function arrangeSections(sections, order='') {
+  if(!String(order).trim())return sections;
+  const tokens=String(order).split(/[,>\n]+/).map(x=>x.trim()).filter(Boolean);
+  if(tokens.length>120)throw new Error('Use at most 120 section entries.');
+  const normalize=name=>name.toLowerCase().replace(/\s+/g,'');
+  const aliases={v:'verse',c:'chorus',b:'bridge',i:'intro',o:'outro',p:'prechorus'};
+  return tokens.map(token=>{
+    const key=normalize(token);
+    let candidates=sections.filter(s=>normalize(s.name)===key);
+    if(!candidates.length){const match=/^([vcbiop])(\d*)$/i.exec(key);if(match){const name=aliases[match[1].toLowerCase()]+match[2];candidates=sections.filter(s=>normalize(s.name).replace(/-/g,'')===name);}}
+    if(!candidates.length&&/^\d+$/.test(token)){const section=sections[Number(token)-1];if(section)candidates=[section];}
+    if(candidates.length!==1)throw new Error(candidates.length?'Section "'+token+'" is ambiguous. Use unique section names.':'Unknown section "'+token+'". Use its heading, shorthand (V1, C, B), or section number.');
+    return {...structuredClone(candidates[0]),id:uid()};
+  });
+}
+
 export function validSong(data) {
   const title=clean(data?.title, 100), key=clean(data?.key, 16), bpm=Number(data?.bpm)||0;
   const source=String(data?.source||'').slice(0,LIMIT);
-  const sections=parseSongText(source);
+  const originalSections=parseSongText(source);
+  const order=clean(data?.order,2000);
+  const sections=arrangeSections(originalSections,order);
   if(!title || !sections.length) throw new Error('Add a song title and at least one lyric line.');
-  return { id:clean(data?.id,120)||uid(), title, key, bpm:Math.max(0,Math.min(300,Math.floor(bpm))), source, sections };
+  return { id:clean(data?.id,120)||uid(), title, key, order, bpm:Math.max(0,Math.min(300,Math.floor(bpm))), source, sections };
 }
 
 export function applyAction(state, action) {
@@ -143,6 +161,15 @@ export function applyAction(state, action) {
         if(i<s.cursor.song)s.cursor.song--;
       }
       clampCursor(); break;
+    }
+    case 'position-in-set': {
+      const to=Number(action.position)-1;
+      if(!Number.isInteger(i)||i<0||i>=set().songs.length||!Number.isInteger(to)||to<0||to>=set().songs.length)throw new Error('Enter a position between 1 and '+set().songs.length+'.');
+      const [id]=set().songs.splice(i,1);set().songs.splice(to,0,id);
+      if(s.cursor.song===i)s.cursor.song=to;
+      else if(i<s.cursor.song&&to>=s.cursor.song)s.cursor.song--;
+      else if(i>s.cursor.song&&to<=s.cursor.song)s.cursor.song++;
+      break;
     }
     case 'move-in-set': {
       const j=i+(action.dir===1?1:-1);

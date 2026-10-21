@@ -126,3 +126,11 @@ The interface is now Sync Lyrics, with system-ui / -apple-system / Segoe UI typo
 Use a standalone `{note: Guitar only}` line to add a note to its section. Notes are visible throughout that section in Stage and Control, never on Projector. `{comment: ...}` and `{c: ...}` are aliases. Notes do not consume lyric lines or create extra slides. `#` lines are editor comments and appear nowhere. Notes survive saves, backups and source roundtrips.
 
 The empty new-song field shows every supported syntax form, including section headings, chords, notes, comments, slide breaks, optional metadata and the supported ChordPro section delimiters. An expandable syntax guide remains available while typing. Metadata directives are ignored for projection; title, key and BPM are entered in the fields above.
+
+## Beta 4: typed order and syntax previews
+
+Notes are neon green (#a8ff3e) against the monochrome interface. The song editor shows source beside actual Stage/Control and Projector previews, plus the complete syntax reference.
+
+Use the Section order field to arrange a song: `Verse 1, Chorus, Verse 2, Chorus, Bridge, Chorus`, or `V1, C, V2, C, B, C`. Numbers refer to section positions in the source. Each section can be repeated. Empty order follows the source. Unknown or ambiguous names are rejected. Orders are saved with the song and included in backups.
+
+In Edit Setlist, type a song's new number to move it to that position. The currently live song and slide stay selected, including sets containing repeated songs.
