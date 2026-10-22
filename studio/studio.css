@@ -13,3 +13,7 @@
 .onsong-entry span{flex:1}
 .onsong-entry small{font-size:11px;color:#9fbda4}
 @media(max-width:650px){.onsong-dialog{max-height:96vh;padding:12px}.onsong-items{max-height:42vh}.onsong-dialog .row{gap:5px}}
+
+/* Keep filtered song rows hidden even though songitem uses flex layout. */
+.songitem[hidden]{display:none!important}
+.library-search input{width:100%}
