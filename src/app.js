@@ -364,7 +364,7 @@ setImportInput.addEventListener('change',async()=>{
   const manifest=JSON.parse(await file.text());
   if(manifest.format!=='lyrics-live-set'||manifest.version!==1||!Array.isArray(manifest.songs)||manifest.songs.length>120)throw new Error('Choose a set exported by Lyrics Live Studio.');
   const prepared=manifest.songs.map(item=>validSong({...item,id:crypto.randomUUID()}));
-  if(app.data.library.length+prepared.length>300)throw new Error('Library cannot exceed 300 songs.');
+  if(app.data.library.length+prepared.length>1000)throw new Error('Library cannot exceed 1000 songs.');
   if(app.data.sets.length>=50)throw new Error('Maximum 50 sets reached.');
   const next=structuredClone(app.data);
   next.library.push(...prepared);
@@ -379,7 +379,7 @@ backupInput.addEventListener('change',async()=>{
   const file=backupInput.files?.[0];backupInput.value='';if(!file)return;
   if(!app.isHost){toast('Import backups on the host device.');return;}
   try {
-    if(file.size>2_000_000)throw new Error('Backup is too large (2 MB limit).');
+    if(file.size>8_000_000)throw new Error('Backup is too large (8 MB limit).');
     if(!confirm('Replace the host song library and sets with this backup?'))return;
     const restored=validateImport(JSON.parse(await file.text()));restored.rev=app.data.rev+1;app.data=restored;persist();app.peer?.sendSnapshot();app.showInvite=false;render();toast('Backup imported.');
   }catch(e){toast(e.message||'Import failed.');}
