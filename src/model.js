@@ -144,7 +144,7 @@ export function applyAction(state, action) {
       const edited=validSong(action.song);
       const idx=s.library.findIndex(x=>x.id===edited.id);
       if(idx>=0) s.library[idx]=edited;
-      else if(s.library.length<300) s.library.push(edited);
+      else if(s.library.length<1000) s.library.push(edited);
       clampCursor(); break;
     }
     case 'delete-song': {
@@ -223,7 +223,7 @@ export function applyAction(state, action) {
 }
 
 export function validateImport(parsed) {
-  if(!parsed || !Array.isArray(parsed.library) || !Array.isArray(parsed.sets) || parsed.library.length>300 || parsed.sets.length>50) throw new Error('Invalid Lyrics Live backup.');
+  if(!parsed || !Array.isArray(parsed.library) || !Array.isArray(parsed.sets) || parsed.library.length>1000 || parsed.sets.length>50) throw new Error('Invalid Lyrics Live backup.');
   const lib=parsed.library.map(validSong);
   const ids=new Set(lib.map(x=>x.id));
   const sets=parsed.sets.map(x=>({id:clean(x.id,120)||uid(),name:clean(x.name,80)||'Set',songs:(Array.isArray(x.songs)?x.songs:[]).filter(id=>ids.has(id)).slice(0,120)}));
@@ -270,7 +270,7 @@ export const SONG_SYNTAX_EXAMPLE = `[Verse 1]
 
 // Shared files are read-only from the site. GitHub credentials never enter this app.
 export async function mergeRepositorySongs(state,manifest){
-  if(!manifest||manifest.version!==1||!Array.isArray(manifest.songs)||manifest.songs.length>300)throw new Error('Use version 1 and a songs array in songs/library.json.');
+  if(!manifest||manifest.version!==1||!Array.isArray(manifest.songs)||manifest.songs.length>1000)throw new Error('Use version 1 and a songs array in songs/library.json.');
   const seen=new Set();
   const songs=manifest.songs.map((entry,index)=>{
     if(!entry||typeof entry.id!=='string'||!entry.id.trim()||entry.id.length>120)throw new Error('GitHub song '+(index+1)+' needs a stable id.');
@@ -285,7 +285,7 @@ export async function mergeRepositorySongs(state,manifest){
   const hashes=await Promise.all(songs.map(fingerprint));
   for(let i=0;i<songs.length;i++){
     const incoming=songs[i],index=next.library.findIndex(song=>song.id===incoming.id);
-    if(index<0){if(next.library.length>=300)throw new Error('Song library is full (300 songs).');next.library.push(incoming);}
+    if(index<0){if(next.library.length>=1000)throw new Error('Song library is full (1000 songs).');next.library.push(incoming);}
     else{
       const existing=next.library[index],previous=next.repositoryVersions[incoming.id];
       // A local edit is kept. An unchanged shared copy can safely receive GitHub updates.
