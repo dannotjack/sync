@@ -56,3 +56,6 @@ body,.welcome-shell{background:#080808}.welcome-top{justify-content:flex-end}.br
 .photo-credit{margin:6px 0 0;color:#f6eb4f;font:500 clamp(11px,calc(var(--scene-width) * .01),16px)/1.2 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:-.025em;text-shadow:0 2px 8px #000}
 
 .github-library-link{color:#ddd;text-decoration:underline;text-underline-offset:3px;display:inline-flex;align-items:center;gap:4px}.github-library-link:hover{color:white}
+
+.set-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.projector-overflow{color:#f0d66b;font-size:13px;line-height:1.5;padding:10px 0}

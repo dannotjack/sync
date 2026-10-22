@@ -24,7 +24,7 @@ export function parseSongText(source) {
     const note=/^\{(?:note|comment|c):\s*(.*?)\}$/i.exec(line);
     if(note){if(!current)begin('Verse 1');if(note[1])current.notes.push(note[1].slice(0,300));continue;}
     if (/^\{(?:title|subtitle|artist|key|tempo|time):/i.test(line)) continue;
-    const chordOnly = /^\[([A-G](?:#|b)?(?:m|maj|dim|sus|add|aug|\d|\/|\+|\-|\(|\))*?)\]$/.test(line);
+    const chordOnly = /^\[([A-G](?:#|b)?(?:m|maj|dim|sus|add|aug|\d|\+|\-|\(|\))*(?:\/[A-G](?:#|b)?)?)\]$/.test(line);
     const name = /^\[([^\]]+)\]$/.exec(line);
     if (name && !chordOnly) { begin(name[1]); continue; }
     const chordProStart = /^\{start_of_(verse|chorus|bridge)(?::([^}]+))?\}$/i.exec(line);
@@ -329,3 +329,4 @@ export async function mergeRepositorySongs(state,manifest){
   next.rev=(Number(next.rev)||0)+1;
   return next;
 }
+

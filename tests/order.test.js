@@ -1,4 +1,5 @@
 import {test} from 'node:test';
+import {multiSongFixture} from './fixtures.js';
 import assert from 'node:assert/strict';
 import {validSong,sampleState,applyAction,activeSong,validateImport} from '../src/model.js';
 const source='[Verse 1]\n# Softly\n[G]One\n[Verse 2]\n[C]Two\n[Chorus]\n[D]Together\n[Bridge]\n[Em]Build';
@@ -12,6 +13,6 @@ test('song order survives repeated validation, saving and backups',()=>{
  let s=sampleState();const song=validSong({title:'Ordered',source,order:'C, V1, C'});s=applyAction(s,{kind:'save-song',song});const restored=validateImport(s).library.find(x=>x.id===song.id);assert.equal(restored.order,'C, V1, C');assert.equal(restored.sections.length,3);assert.equal(restored.source,source);
 });
 test('typed setlist positions preserve the live occurrence and slide',()=>{
- for(const from of [0,1,2])for(const position of [1,2,3]){let s=sampleState();s.cursor={song:1,section:0,page:1};s=applyAction(s,{kind:'position-in-set',index:from,position});assert.equal(activeSong(s).id,'waters');assert.equal(s.cursor.page,1);}
- let s=sampleState();s.sets[0].songs=['morning','waters','morning'];s.cursor={song:2,section:1,page:1};s=applyAction(s,{kind:'position-in-set',index:2,position:1});assert.equal(s.cursor.song,0);assert.equal(activeSong(s).id,'morning');assert.equal(s.cursor.page,1);assert.throws(()=>applyAction(s,{kind:'position-in-set',index:0,position:0}),/position/);
+ for(const from of [0,1,2])for(const position of [1,2,3]){let s=multiSongFixture();s.cursor={song:1,section:0,page:1};s=applyAction(s,{kind:'position-in-set',index:from,position});assert.equal(activeSong(s).id,'waters');assert.equal(s.cursor.page,1);}
+ let s=multiSongFixture();s.sets[0].songs=['morning','waters','morning'];s.cursor={song:2,section:1,page:1};s=applyAction(s,{kind:'position-in-set',index:2,position:1});assert.equal(s.cursor.song,0);assert.equal(activeSong(s).id,'morning');assert.equal(s.cursor.page,1);assert.throws(()=>applyAction(s,{kind:'position-in-set',index:0,position:0}),/position/);
 });

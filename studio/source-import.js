@@ -21,7 +21,7 @@ export function setupOnSongBrowser({isImported,addSongs,notify}){
     if(!catalogue){mount.innerHTML='<div class="onsong-overlay"><div class="onsong-dialog" role="dialog" aria-modal="true"><h2>Loading song catalogue…</h2><p class="muted">Reading song metadata only.</p></div></div>';return;}
     mount.innerHTML='<div class="onsong-overlay"><section class="onsong-dialog" role="dialog" aria-modal="true" aria-label="Import OnSong collection">'+
       '<div class="row space"><div><h2>Import OnSong collection</h2><p class="muted">Matt Graham worship songbook · Client-side import into your local master library</p></div><button data-onsong-action="close" '+(busy?'disabled':'')+'>Close</button></div>'+
-      '<p class="info">These songs may be copyrighted. Their upstream repository provides no explicit redistribution licence. Import and display only songs you have rights to use. Lyrics Live does not publish upstream lyrics automatically.</p>'+
+      '<p class="info">These songs may be copyrighted. Their upstream repository provides no explicit redistribution licence. Import and display only songs you have rights to use. Sync Lyrics does not publish upstream lyrics automatically.</p>'+
       '<input id="onsong-query" type="search" placeholder="Search 677 song titles…" value="'+esc(query)+'" aria-label="Search song catalogue" '+(busy?'disabled':'')+'>'+
       '<div class="row" style="margin:9px 0">'+
         '<button data-onsong-action="select-filtered" '+(busy?'disabled':'')+'>Select matching</button>'+
@@ -40,14 +40,14 @@ export function setupOnSongBrowser({isImported,addSongs,notify}){
     mount.hidden=false;mount.innerHTML='<div class="onsong-overlay"><div class="onsong-dialog"><h2>Loading catalogue…</h2></div></div>';
     try{
       if(!catalogue){
-        const response=await fetch(new URL('./onsong-catalog.json',import.meta.url),{cache:'no-store'});
+        const response=await fetch(new URL('./onsong-catalog.json',import.meta.url),{cache:'no-store',signal:AbortSignal.timeout(15000)});
         if(!response.ok)throw Error('Catalogue failed to load.');
         const parsed=await response.json();
         if(parsed.version!==1||!Array.isArray(parsed.files)||parsed.files.length!==parsed.count||!/^[a-f0-9]{40}$/.test(parsed.commit))throw Error('Unsupported catalogue.');
         catalogue=parsed;
       }
       redraw();
-    }catch(e){mount.innerHTML='<div class="onsong-overlay"><div class="onsong-dialog"><h2>Could not open source catalogue</h2><p>'+esc(e.message)+'</p><button data-onsong-action="close">Close</button></div></div>';}
+    }catch(e){mount.innerHTML='<div class="onsong-overlay"><div class="onsong-dialog"><h2>Could not open source catalogue</h2><p>'+esc(e.message)+'</p><button data-onsong-action="retry">Retry</button> <button data-onsong-action="close">Close</button></div></div>';}
   }
   async function importFiles(files){
     if(!files.length){notify('No new songs selected.');return;}
@@ -59,7 +59,7 @@ export function setupOnSongBrowser({isImported,addSongs,notify}){
         const batch=files.slice(start,start+8);
         const loaded=await Promise.all(batch.map(async file=>{
           try{
-            const res=await fetch(onSongRawUrl(catalogue.commit,file.path));
+            const res=await fetch(onSongRawUrl(catalogue.commit,file.path),{signal:AbortSignal.timeout(15000)});
             if(!res.ok)throw Error('HTTP '+res.status);
             const body=await res.text();
             if(body.length>300000)throw Error('File too large');
@@ -90,6 +90,7 @@ export function setupOnSongBrowser({isImported,addSongs,notify}){
     const action=btn.dataset.onsongAction;
     if(action==='stop'){stop=true;message='Stopping after the current batch…';updateCounters();return;}
     if(busy)return;
+    if(action==='retry'){await open();return;}
     if(action==='close'){mount.hidden=true;mount.innerHTML='';return;}
     if(action==='select-filtered'){for(const file of filtered())if(!isImported(onsongId(file.path)))selected.add(file.path);redraw();return;}
     if(action==='clear'){selected.clear();redraw();return;}

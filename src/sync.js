@@ -1,15 +1,23 @@
 /* VDO.Ninja data-only room adapter. Host is the only state authority. */
 const PROTOCOL = 'lyrics-live/3';
+export const MAX_SNAPSHOT_CHARS=5_000_000;
+export function assertSessionSize(state){if(JSON.stringify(state).length>MAX_SNAPSHOT_CHARS)throw Error('This library is too large to sync. Remove unused songs or use a smaller set.');return state;}
 const sleep = ms => new Promise(resolve=>setTimeout(resolve,ms));
 export class LyricsPeer {
   constructor({ code, isHost, password='', onState, onStatus, onCommand, onAuth, onPresence }) {
     this.code=code;this.isHost=isHost;this.password=password;
     this.onState=onState;this.onStatus=onStatus;this.onCommand=onCommand;this.onAuth=onAuth;this.onPresence=onPresence;
     this.sdk=null;this.hostUuid=null;this.authorized=new Set();this.peers=new Set();this.transfers=new Map();
-    this.lastHostAt=0;this.timer=null;this.closed=false;this.authenticated=isHost;this.latestRevision=-1;
+    this.loadStartedAt=0;this.startedAt=0;this.searchNotice=false;this.lastHostAt=0;this.timer=null;this.closed=false;this.authenticated=isHost;this.latestRevision=-1;
     this.getSnapshot=null;this.snapshot=null;this.pending=new Map();this.commandResults=new Map();
   }
-  report(value) { this.onStatus?.(value); }
+  report(value,detail) { this.onStatus?.(value,detail); }
+  checkConnection(now=Date.now()){
+    if(this.isHost)return;
+    if(!this.hostUuid && now-this.startedAt>25000){if(!this.searchNotice){this.searchNotice=true;this.report('not-found','No host found. Check the code and keep the host device awake.');}return;}
+    if(this.hostUuid&&!this.snapshot&&now-this.loadStartedAt>25000&&!this.searchNotice){this.searchNotice=true;this.report('sync-failed','The host connected, but lyrics could not load. Try again.');}
+    if(this.hostUuid && now-this.lastHostAt>14000){this.resetHost();this.send({kind:'hello'});}
+  }
   send(message,uuid) {
     if(!this.sdk) return false;
     try {return this.sdk.sendData({ app: PROTOCOL, ...message },uuid);} catch(e){console.warn('Send failed',e);return false;}
@@ -31,13 +39,13 @@ export class LyricsPeer {
     this.sdk.addEventListener('dataChannelClose',e=>{if(e.detail?.uuid){this.peers.delete(e.detail.uuid);this.authorized.delete(e.detail.uuid);this.onPresence?.(this.peers.size);if(e.detail.uuid===this.hostUuid)this.resetHost();}});
     this.sdk.addEventListener('peerDisconnected',e=>{if(e.detail?.uuid){this.peers.delete(e.detail.uuid);this.authorized.delete(e.detail.uuid);this.onPresence?.(this.peers.size);if(e.detail.uuid===this.hostUuid)this.resetHost();}});
     this.sdk.addEventListener('dataReceived',e=>{this.receive(e.detail?.data,e.detail?.uuid);});
-    this.report('connecting');
+    this.startedAt=Date.now();this.report('connecting');
     await this.sdk.autoConnect({room:'lyrics_live_'+this.code,mode:'half',view:{audio:false,video:false},label:this.isHost?'Lyrics Host':'Lyrics Guest'});
     if(this.closed)return;
     this.report(this.isHost?'host-ready':'searching');
     this.timer=setInterval(()=>{
       if(this.isHost) this.send({kind:'beacon',host:true,rev:this.getSnapshot?.().rev});
-      else if(Date.now()-this.lastHostAt>14000) { this.resetHost();this.send({kind:'hello'}); }
+      else this.checkConnection();
     },5000);
   }
   receive(message,uuid) {
@@ -67,13 +75,13 @@ export class LyricsPeer {
     if(message.kind==='beacon' && message.host===true) {
       if(this.hostUuid && this.hostUuid!==uuid)return;
       const isNew=!this.hostUuid;
-      this.hostUuid=uuid;this.lastHostAt=Date.now();this.report('connected');
-      if(isNew){this.send({kind:'request-snapshot'},uuid);if(this.password)this.send({kind:'auth',password:this.password},uuid);}
+      this.hostUuid=uuid;this.lastHostAt=Date.now();if(this.snapshot)this.searchNotice=false;this.report(this.snapshot&&this.latestRevision>=(message.rev??this.latestRevision)?'connected':'loading');
+      if(isNew){this.loadStartedAt=Date.now();this.send({kind:'request-snapshot'},uuid);if(this.password)this.send({kind:'auth',password:this.password},uuid);}
       else if(message.rev!=null && message.rev>this.latestRevision) this.send({kind:'request-snapshot'},uuid);
       return;
     }
     if(uuid!==this.hostUuid)return;
-    this.lastHostAt=Date.now();this.report('connected');
+    this.lastHostAt=Date.now();
     if(message.kind==='command-result'){const pending=this.pending.get(message.id);if(pending){clearTimeout(pending.timer);this.pending.delete(message.id);if(message.ok)pending.resolve();else pending.reject(new Error(message.message||'Host rejected the change.'));}return;}
     if(message.kind==='live') {
       if(!this.snapshot||message.baseRev!==this.latestRevision){this.send({kind:'request-snapshot'},uuid);return;}
@@ -82,14 +90,14 @@ export class LyricsPeer {
       const next={...this.snapshot,cursor:c,blank:!!message.blank,rev:message.rev};
       const set=next.sets.find(s=>s.id===next.activeSetId);const id=set?.songs[c.song];const song=next.liveSong?.id===id?next.liveSong:next.library.find(s=>s.id===id);
       if(set?.songs.length&&!song?.sections[c.section]?.pages[c.page])return;
-      this.snapshot=next;this.latestRevision=next.rev;this.onState?.(next);return;
+      this.snapshot=next;this.latestRevision=next.rev;this.onState?.(next);this.report('connected');return;
     }
     if(message.kind==='auth-ok') {this.authenticated=true;this.onAuth?.(true);}
     if(message.kind==='auth-failed') {this.authenticated=false;this.onAuth?.(false);}
     if(message.kind==='command-error') this.onStatus?.('error',message.message);
     if(message.kind==='snapshot-part') {
       const {id,n,total,chunk,rev}=message;
-      if(typeof id!=='string'||typeof chunk!=='string'||!Number.isInteger(n)||!Number.isInteger(total)||total<1||total>1000||n<0||n>=total)return;
+      if(typeof id!=='string'||typeof chunk!=='string'||chunk.length>5000||!Number.isInteger(n)||!Number.isInteger(total)||total<1||total>1000||n<0||n>=total)return;
       let t=this.transfers.get(id);
       if(!t){t={chunks:new Array(total),received:0,total,rev,created:Date.now()};this.transfers.set(id,t);}
       if(t.total!==total)return;
@@ -101,7 +109,7 @@ export class LyricsPeer {
         try {
           const snap=JSON.parse(t.chunks.join(''));
           if(snap && Array.isArray(snap.library) && Array.isArray(snap.sets) && Number(snap.rev)>=this.latestRevision) {
-            this.latestRevision=Number(snap.rev);this.snapshot=snap;this.onState?.(snap);
+            this.latestRevision=Number(snap.rev);this.snapshot=snap;this.onState?.(snap);this.report('connected');
           }
         } catch(e){console.warn('Snapshot decode failed',e);}
       }
@@ -112,6 +120,7 @@ export class LyricsPeer {
     if(!this.isHost || !this.getSnapshot || this.closed)return;
     const snapshot=this.getSnapshot();
     const json=JSON.stringify(snapshot);
+    if(json.length>MAX_SNAPSHOT_CHARS){this.report('error','Library is too large for this session; remove unused songs.');return;}
     const parts=json.match(/[\s\S]{1,5000}/g)||[''];
     if(parts.length>1000){this.report('error','Library is too large for this session; shorten it or remove unused songs.');return;}
     const id=(crypto.randomUUID?.()||String(Math.random()))+'_'+snapshot.rev;
@@ -122,7 +131,7 @@ export class LyricsPeer {
     }
   }
   resetHost(){
-    this.hostUuid=null;this.authenticated=false;this.latestRevision=-1;this.transfers.clear();
+    this.hostUuid=null;this.authenticated=false;this.latestRevision=-1;this.snapshot=null;this.transfers.clear();this.startedAt=Date.now();this.searchNotice=false;
     this.onAuth?.(false,'reconnecting');this.report('reconnecting');
     for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(new Error('Connection lost. Check the live state before retrying.'));}this.pending.clear();
   }
@@ -149,3 +158,4 @@ export class LyricsPeer {
     this.sdk=null;
   }
 }
+

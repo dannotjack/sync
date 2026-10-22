@@ -1,6 +1,6 @@
-import { STORAGE_KEY, sampleState, validateImport, validSong, songToText, applyAction, activeSet, activeSong, activeSection, atStart, atEnd, chordSegments, SONG_SYNTAX_EXAMPLE, parseSongText, arrangeSections, mergeRepositorySongs, removeOriginalDemoSongs, DEMO_SONG_ID } from './model.js?v=beta10';
+import { STORAGE_KEY, sampleState, validateImport, validSong, songToText, applyAction, activeSet, activeSong, activeSection, atStart, atEnd, chordSegments, SONG_SYNTAX_EXAMPLE, parseSongText, arrangeSections, mergeRepositorySongs, removeOriginalDemoSongs, DEMO_SONG_ID } from './model.js?v=beta11';
 import {convertOnSong,onSongRawUrl} from '../studio/onsong.js';
-import { LyricsPeer } from './sync.js?v=beta10';
+import { LyricsPeer,assertSessionSize } from './sync.js?v=beta11';
 const $ = (query, root=document) => root.querySelector(query);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icon = (name, size=20) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${({
@@ -46,7 +46,7 @@ function loadSaved(){
 }
 function persist(){if(app.isHost&&app.screen!=='demo'&&app.data){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(app.data));}catch(e){toast('Browser storage is full. Export a backup.');}}}
 async function loadRepositorySongs(state){
-  const abort=new AbortController();const timer=setTimeout(()=>abort.abort(),5000);
+  const abort=new AbortController();const timer=setTimeout(()=>abort.abort(),15000);
   try{
     const response=await fetch(new URL('./songs/library.json',location.href),{cache:'no-store',signal:abort.signal});
     if(!response.ok)throw new Error('Library file could not load.');
@@ -83,7 +83,7 @@ const app={
 let toastTimer;
 function toast(message){app.message=message;renderToast();clearTimeout(toastTimer);toastTimer=setTimeout(()=>{app.message='';renderToast();},4000);}
 function renderToast(){const el=$('#toast-root');if(el)el.innerHTML=app.message?`<div class="toast" role="status">${escape(app.message)}</div>`:'';}
-function statusLabel(){return ({'connecting':'Connecting…','host-ready':'Hosting session','connected':'Synced','searching':'Finding host…','disconnected':'Disconnected','reconnecting':'Reconnecting…','error':'Connection error','idle':'Offline preview'})[app.status]||'Waiting…';}
+function statusLabel(){return ({'connecting':'Connecting…','host-ready':'Hosting session','connected':'Synced','loading':'Loading lyrics…','not-found':'Host not found','sync-failed':'Lyrics could not load','searching':'Finding host…','disconnected':'Disconnected','reconnecting':'Reconnecting…','error':'Connection error','idle':'Offline preview'})[app.status]||'Waiting…';}
 function indicator(){const ok=app.isHost?app.status==='host-ready':app.status==='connected';return `<span class="connection ${ok?'good':'warning'}"><span class="status-dot"></span><span>${escape(statusLabel())}</span></span>`;}
 function currentSong(){return activeSong(app.data);}
 function editingSet(){return app.data?.sets.find(s=>s.id===app.editSetId)||activeSet(app.data);}
@@ -95,7 +95,7 @@ async function dispatch(action){
   if(!app.peer && app.screen!=='demo')throw new Error('Session not ready.');
   if(app.isHost || app.screen==='demo') {
     const prior=app.data;
-    app.data=applyAction(prior,action);persist();render();
+    app.data=assertSessionSize(applyAction(prior,action));persist();render();
     if(['step','jump','blank'].includes(action.kind)&&prior.cursor.song===app.data.cursor.song&&prior.activeSetId===app.data.activeSetId)app.peer?.broadcastLive(prior.rev);
     else app.peer?.sendSnapshot();
   }else await app.peer.command(action);
@@ -114,11 +114,11 @@ async function startSession({host,code,password,role,name=''}){
     try{
       const updated=await loadRepositorySongs(app.data);
       if(app.generation!==generation)return;
-      app.data=updated;app.data.liveSong=null;app.data.liveSong=structuredClone(activeSong(app.data));persist();render();
+      assertSessionSize(updated);app.data=updated;app.data.liveSong=null;app.data.liveSong=structuredClone(activeSong(app.data));persist();render();
     }catch(error){if(app.generation!==generation)return;toast('GitHub songs unavailable. Using saved library. '+(error.message||''));}
   }
   const peer=new LyricsPeer({code,isHost:host,password:host?password:role==='control'?password:'',
-    onStatus:(value,detail)=>{app.status=value;if(detail)toast(detail);renderStatus();},
+    onStatus:(value,detail)=>{app.status=value;if(detail)toast(detail);renderStatus();if(value==='not-found'||value==='sync-failed'){app.modal='host-not-found';render();}else if(app.modal==='host-not-found'&&value==='connected'){app.modal='';render();}},
     onState:snap=>{const prior=app.data?.cursor;app.data=snap;render();if(!prior||JSON.stringify(prior)!==JSON.stringify(snap.cursor))followLive();},
     onCommand:action=>dispatch(action),
     onAuth:(ok,reason)=>{app.authorized=ok;if(!ok&&reason!=='reconnecting'){app.modal='auth';toast('Incorrect controller password.');}else if(ok&&app.modal==='auth')app.modal='';render();},
@@ -154,7 +154,7 @@ function wordmark(){return `<span class="brand-name">Sync Lyrics</span>`;}
 function welcome(){return `<div class="photo-home"><img class="home-photo" src="./assets/home-room.jpg" width="1376" height="768" alt="" fetchpriority="high"><header class="photo-title"><h1>Sync Lyrics</h1><p class="photo-credit">not jack.</p></header><main class="photo-controls"><p class="photo-tagline">Peer-to-peer lyrics syncing.</p>
 <button class="btn primary wide large" data-action="show-create">Create session ${icon('plus',18)}</button>
 <div class="home-divider">or join</div><form id="join-form"><label for="join-code">SESSION CODE</label><div class="join-inline"><input id="join-code" name="code" class="code-input" placeholder="A7K92B" maxlength="6" autocomplete="off" autocapitalize="characters" value="${escape(app.pendingCode)}" required><button class="btn outline" type="submit">Join ${icon('right',17)}</button></div></form>
-<button class="demo-link" data-action="preview">Try demo ${icon('right',15)}</button><a class="demo-link" href="./studio/" style="display:block;text-align:center;margin-top:12px;color:#f3d569;text-decoration:none">Open Lyrics Live Studio →</a></main></div>`;}
+<button class="demo-link" data-action="preview">Try demo ${icon('right',15)}</button><a class="demo-link" href="./studio/" style="display:block;text-align:center;margin-top:12px;color:#f3d569;text-decoration:none">Open Sync Lyrics Studio →</a></main></div>`;}
 function createView(){return `<div class="welcome-shell"><header class="welcome-top"><div class="brand">${wordmark()}</div><button class="quiet-btn" data-action="home">${icon('left',16)} Back</button></header><main class="form-shell"><h1 class="form-title">Create session</h1><p class="intro">Keep this browser open and this device awake.</p><form id="create-form" class="form-card">
   <label for="create-name">SESSION NAME</label><input id="create-name" name="name" value="Sunday Worship" maxlength="80" required>
   <label for="create-password">CONTROL PASSWORD</label><input id="create-password" name="password" type="password" minlength="6" maxlength="100" autocomplete="new-password" placeholder="At least 6 characters" required>
@@ -195,7 +195,7 @@ function setlistView(){
   const editing=app.editingSet&&app.role==='control'&&canControl();
   const set=editing?editingSet():activeSet(app.data),current=set.id===app.data.activeSetId?app.data.cursor.song:-1;
   const library=app.data.library;
-  return `<div class="setlist-content"><div class="set-toolbar"><div class="set-title-wrap"><div class="overline">CURRENT SET</div><h2>${escape(set?.name||'Setlist')}</h2></div>${app.role==='control'&&canControl()?`<button class="btn outline small" data-action="toggle-edit">${icon(editing?'check':'edit',16)} ${editing?'Done':'Edit Setlist'}</button>`:''}</div>
+  return `<div class="setlist-content"><div class="set-toolbar"><div class="set-title-wrap"><div class="overline">CURRENT SET</div><h2>${escape(set?.name||'Setlist')}</h2></div>${app.role==='control'&&canControl()?`<div class="set-actions">${app.isHost?'<button class="btn outline small" data-action="show-set-import">Import Studio set</button>':''}<button class="btn outline small" data-action="toggle-edit">${icon(editing?'check':'edit',16)} ${editing?'Done':'Edit Setlist'}</button></div>`:''}</div>
    ${editing?`<div class="editing-tools"><label>Edit set <select id="set-select" data-action="set-select">${app.data.sets.map(st=>`<option value="${escape(st.id)}" ${st.id===set.id?'selected':''}>${escape(st.name)}</option>`).join('')}</select></label><button class="btn primary small" data-action="take-set-live">Go live with this set</button><button data-action="new-set" class="btn outline small">${icon('plus',15)} New set</button><button data-action="rename-set" class="btn outline small">Rename</button><button data-action="open-library" class="btn outline small">${icon('library',15)} Song library</button></div>`:''}
    <div class="setlist-rows">${(set?.songs||[]).length?set.songs.map((id,i)=>{const song=library.find(x=>x.id===id);if(!song)return '';return `<div class="set-row ${i===current?'active':''}">${editing?`<input class="set-position" type="number" min="1" max="${set.songs.length}" step="1" value="${i+1}" data-position-index="${i}" aria-label="Position for ${escape(song.title)}">`:`<span class="track-number">${String(i+1).padStart(2,'0')}</span>`}<div class="set-row-copy"><strong>${escape(song.title)}</strong><span>${escape(song.key||'—')} ${i===current?'· ON AIR':''}${i===current&&app.data.liveSong&&(song.source!==app.data.liveSong.source||song.order!==app.data.liveSong.order||song.title!==app.data.liveSong.title)?' · SAVED CHANGES':''}</span></div>${editing?`<div class="mini-actions"><button data-action="move" data-index="${i}" data-dir="-1" title="Move up" ${i===0?'disabled':''}>${icon('arrowUp',17)}</button><button data-action="move" data-index="${i}" data-dir="1" title="Move down" ${i===set.songs.length-1?'disabled':''}>${icon('arrowDown',17)}</button><button data-action="remove" data-index="${i}" title="Remove from set">${icon('close',17)}</button></div>`:app.role==='control'&&canControl()?`<button class="btn outline small" data-action="go-song" data-index="${i}">${i===current?'Go live / reload':'Go live'}</button>`:i===current?`<span class="live-mark">${icon('monitor',17)}</span>`:''}</div>`;}).join(''):`<div class="empty-list">No songs yet. Add one from the library.</div>`}</div>
    ${editing?`<button class="add-song-button" data-action="open-library">${icon('plus',18)} Add songs from library</button>`:''}
@@ -208,10 +208,16 @@ function controlDock(){if(!app.data||app.role!=='control'||!canControl())return 
    <div class="dock-buttons"><button class="dock-button back" data-action="back" ${atStart(s)?'disabled':''}>${icon('left',26)}<strong>Back</strong></button><button class="dock-button next" data-action="next" ${atEnd(s)?'disabled':''}><strong>Next</strong>${icon('right',26)}</button><button class="dock-button blank ${s.blank?'active':''}" data-action="blank">${icon(s.blank?'show':'blank',25)}<strong>${s.blank?'Go live':'Blank'}</strong></button></div></div>`;
 }
 function stageScreen(){return `${topbar()}<main class="performance-shell">${viewNav()}<div class="performance-panel">${app.data?`${bodyHeader()}${songTabs()}${app.tab==='lyrics'?lyricsView():setlistView()}`:`<div class="waiting-host"><span class="spin"></span><h2>Waiting for the host</h2><p>Keep this page open while the host connects. Your screen will populate automatically.</p></div>`}${controlDock()}</div></main>`;}
+function checkProjectorFit(){
+ const frame=$('.projection-frame'),lines=$('.projected-lines'),warning=$('#projector-overflow');if(!frame||!lines||!warning)return;
+ const padding=getComputedStyle(frame),availableHeight=frame.clientHeight-parseFloat(padding.paddingTop)-parseFloat(padding.paddingBottom),availableWidth=frame.clientWidth-parseFloat(padding.paddingLeft)-parseFloat(padding.paddingRight);
+ warning.hidden=app.data?.blank||lines.scrollHeight<=availableHeight+2&&lines.scrollWidth<=availableWidth+2;
+}
+window.addEventListener('resize',checkProjectorFit);
 function projectedText(){const sec=activeSection(app.data),c=app.data?.cursor;return sec?.pages[c.page]?.map(s=>chordSegments(s).map(x=>x.text).join(''))||[];}
 function projectorScreen(){return `<div class="projector-shell" id="projector-shell"><div class="projection-frame ${app.data?.blank?'is-black':''} projection-font-${app.projectorFont}">
   ${app.data&&!app.data.blank?`<div class="projected-lines">${projectedText().map(t=>`<div>${escape(t)}</div>`).join('')||(activeSection(app.data)?'':'<div class="projector-placeholder">Waiting for lyrics</div>')}</div>`:!app.data?'<div class="projected-lines projector-placeholder">Waiting for host…</div>':''}
-  </div><div class="projector-tools ${app.showProjectorTools?'open':''}"><div class="projector-tools-head"><span>${escape(currentSong()?.title||'Sync Lyrics')} ${activeSection(app.data)?'· '+escape(activeSection(app.data).name):''}</span>${indicator()}</div><div class="projector-tool-row"><button class="btn outline small" data-action="projector-font-less" ${app.projectorFont===0?'disabled':''}>${icon('minus',17)} A</button><button class="btn outline small" data-action="projector-font-more" ${app.projectorFont===4?'disabled':''}>${icon('plus',17)} A</button><button class="btn outline small" data-action="fullscreen">${icon('fullscreen',16)} Fullscreen</button><button class="btn outline small" data-action="projection-options">${icon('settings',17)} ${app.showProjectorTools?'Hide':'Options'}</button><button class="btn outline small" data-action="projector-return">${icon('left',17)} Leave view</button></div></div>
+  </div><div class="projector-tools ${app.showProjectorTools?'open':''}"><div class="projector-tools-head"><span>${escape(currentSong()?.title||'Sync Lyrics')} ${activeSection(app.data)?'· '+escape(activeSection(app.data).name):''}</span>${indicator()}</div><p id="projector-overflow" class="projector-overflow" hidden>Lyrics exceed this screen. Reduce text size or add a --- slide break in the editor.</p><div class="projector-tool-row"><button class="btn outline small" data-action="projector-font-less" ${app.projectorFont===0?'disabled':''}>${icon('minus',17)} A</button><button class="btn outline small" data-action="projector-font-more" ${app.projectorFont===4?'disabled':''}>${icon('plus',17)} A</button><button class="btn outline small" data-action="fullscreen">${icon('fullscreen',16)} Fullscreen</button><button class="btn outline small" data-action="projection-options">${icon('settings',17)} ${app.showProjectorTools?'Hide':'Options'}</button><button class="btn outline small" data-action="projector-return">${icon('left',17)} Leave view</button></div></div>
  <button class="projection-gear" data-action="projection-options" title="Projector settings" aria-label="Projector settings">${icon('settings',23)}</button></div>`;}
 function updateOrderPreview(){
   const form=$('#song-editor-form'),out=$('#order-preview');if(!form||!out)return;
@@ -237,10 +243,11 @@ function modal(){if(app.showInvite && (app.screen==='session'||app.screen==='dem
   const wrap=content=>`<div class="modal-backdrop" data-action="close-modal"><div class="modal-card" role="dialog" aria-modal="true" >${content}</div></div>`;
   const close=`<button class="icon-button close-modal" aria-label="Close" data-action="close-modal">${icon('close')}</button>`;
   if(app.modal==='auth')return wrap(`${close}<span class="modal-symbol">${icon('lock',24)}</span><h2>Controller access</h2><p>Enter the session's Control password. Stage and Projector don't require it.</p><form id="reauth-form"><label>CONTROL PASSWORD</label><input type="password" name="password" autocomplete="off" required minlength="6"><button class="btn primary wide large" type="submit">Unlock Control</button></form>`);
+  if(app.modal==='host-not-found')return wrap(`${close}<h2>${app.status==='sync-failed'?'Lyrics could not load':'Host not found'}</h2><p>${app.status==='sync-failed'?'The host connected, but the lyrics did not finish loading. Try again or reduce the host library size.':'Check the session code and keep the host device awake with Sync Lyrics open.'}</p><button class="btn primary wide" data-action="retry-connection">Try again</button><button class="btn outline wide" data-action="leave">Change session code</button>`);
   if(app.modal==='connect-failed')return wrap(`${close}<span class="modal-symbol">${icon('wifi',24)}</span><h2>Connection unavailable</h2><p>The signaling connection couldn't start. Check your internet connection and make sure the VDO.Ninja SDK isn't blocked.</p><button class="btn primary wide" data-action="leave">Return home</button>`);
   if(app.modal==='create-set')return wrap(`${close}<h2>Create a set</h2><p>Organize songs for another service or rehearsal.</p><form id="create-set-form"><label>SET NAME</label><input name="name" maxlength="80" placeholder="Friday Night Worship" required><button type="submit" class="btn primary wide large">Create set</button></form>`);
   if(app.modal==='rename-set')return wrap(`${close}<h2>Rename set</h2><form id="rename-set-form"><label>SET NAME</label><input name="name" maxlength="80" value="${escape(setName())}" required><button type="submit" class="btn primary wide large">Save name</button></form>`);
-  if(app.modal==='import-set')return wrap(`${close}<h2>Import prepared set</h2><p>Choose a JSON set exported from Lyrics Live Studio. Songs are added to the host's library with new IDs, preserving all existing sets. Nothing currently live changes.</p><button class="btn primary wide large" data-action="choose-set-import">Choose set JSON</button>`);
+  if(app.modal==='import-set')return wrap(`${close}<h2>Import prepared set</h2><p>Choose a JSON set exported from Sync Lyrics Studio. Songs are added to the host's library with new IDs, preserving all existing sets. Nothing currently live changes.</p><button class="btn primary wide large" data-action="choose-set-import">Choose set JSON</button>`);
   if(app.modal==='library')return wrap(`<div class="modal-wide">${close}<div class="overline">SONG LIBRARY</div><h2>Your songs</h2><p>Add songs to the set or create a song.</p><p class="help"><a class="github-library-link" href="https://github.com/dannotjack/sync/edit/main/songs/library.json" target="_blank" rel="noopener noreferrer">Edit shared library on GitHub ${icon('external',13)}</a> · Loads when a host session starts. App edits stay with the host.</p><div class="library-list">${app.data.library.map(song=>`<div class="library-entry"><div><strong>${escape(song.title)}</strong><small>Key ${escape(song.key||'—')} · ${song.sections.length} sections</small></div><div class="mini-actions"><button data-action="edit-song" data-id="${escape(song.id)}" title="Edit song">${icon('edit',17)}</button><button data-action="add-song" data-id="${escape(song.id)}" title="Add to set">${icon('plus',20)}</button></div></div>`).join('')}</div><button class="btn primary wide large" data-action="new-song">${icon('plus',17)} Create new song</button></div>`);
   if(app.modal==='song-editor'){
     const song=app.editor||{id:'',title:'',key:'',bpm:0,order:'',source:''};
@@ -268,6 +275,7 @@ function render(){
   if(held){el.appendChild(held);focused?.focus({preventScroll:true});if(selection)focused.setSelectionRange(...selection);}
   else if(isPerformance)el.insertAdjacentHTML('beforeend',modal());
   renderedModalKey=modalKey;
+  if(app.role==='projector')requestAnimationFrame(checkProjectorFit);
   if(app.modal==='song-editor')updateOrderPreview();
   if(!$('#toast-root'))el.insertAdjacentHTML('beforeend','<div id="toast-root"></div>');renderToast();
   if(!app.follow && $('.lyrics-scroll'))$('.lyrics-scroll').scrollTop=keepScroll;
@@ -298,6 +306,7 @@ async function handleAction(btn){
   if(action==='reading-options'){app.showReadingOptions=!app.showReadingOptions;render();}
   if(action==='font-less'){app.font=Math.max(0,app.font-1);render();}
   if(action==='font-more'){app.font=Math.min(2,app.font+1);render();}
+  if(action==='retry-connection'){app.modal='';if(app.peer){app.peer.resetHost();app.peer.send({kind:'hello'});}render();return;}
   if(action==='projector-font-less'){app.projectorFont=Math.max(0,app.projectorFont-1);render();}
   if(action==='projector-font-more'){app.projectorFont=Math.min(4,app.projectorFont+1);render();}
   if(action==='projection-options'){app.showProjectorTools=!app.showProjectorTools;render();}
@@ -387,7 +396,7 @@ setImportInput.addEventListener('change',async()=>{
  try{
   if(file.size>2_000_000)throw new Error('Set file exceeds 2 MB.');
   const manifest=JSON.parse(await file.text());
-  if(manifest.format!=='lyrics-live-set'||manifest.version!==1||!Array.isArray(manifest.songs)||manifest.songs.length>120)throw new Error('Choose a set exported by Lyrics Live Studio.');
+  if(manifest.format!=='lyrics-live-set'||manifest.version!==1||!Array.isArray(manifest.songs)||manifest.songs.length>120)throw new Error('Choose a set exported by Sync Lyrics Studio.');
   const prepared=manifest.songs.map(item=>validSong({...item,id:crypto.randomUUID()}));
   if(app.data.library.length+prepared.length>1000)throw new Error('Library cannot exceed 1000 songs.');
   if(app.data.sets.length>=50)throw new Error('Maximum 50 sets reached.');
@@ -395,7 +404,7 @@ setImportInput.addEventListener('change',async()=>{
   next.library.push(...prepared);
   const set={id:crypto.randomUUID(),name:String(manifest.name||'Imported set').trim().slice(0,80)||'Imported set',songs:prepared.map(song=>song.id)};
   next.sets.push(set);next.rev=(Number(next.rev)||0)+1;
-  app.data=next;app.editSetId=set.id;app.editingSet=true;app.tab='setlist';app.modal='';
+  app.data=assertSessionSize(next);app.editSetId=set.id;app.editingSet=true;app.tab='setlist';app.modal='';
   persist();app.peer?.sendSnapshot();render();toast('Imported set safely. Review it before Go live.');
  }catch(e){toast(e.message||'Set import failed.');}
 });
@@ -406,7 +415,7 @@ backupInput.addEventListener('change',async()=>{
   try {
     if(file.size>8_000_000)throw new Error('Backup is too large (8 MB limit).');
     if(!confirm('Replace the host song library and sets with this backup?'))return;
-    const restored=validateImport(JSON.parse(await file.text()));restored.rev=app.data.rev+1;app.data=restored;persist();app.peer?.sendSnapshot();app.showInvite=false;render();toast('Backup imported.');
+    const restored=validateImport(JSON.parse(await file.text()));restored.rev=app.data.rev+1;app.data=assertSessionSize(restored);persist();app.peer?.sendSnapshot();app.showInvite=false;render();toast('Backup imported.');
   }catch(e){toast(e.message||'Import failed.');}
 });
 if(app.pendingCode.length===6){app.screen='join';}
@@ -414,3 +423,4 @@ if(params.get('demo')==='1') preview();
 else render();
 // Projector deep links auto-join without an extra role selection step.
 if(app.screen==='join' && ['projector','stage'].includes(app.pendingView))startSession({host:false,code:app.pendingCode,password:'',role:app.pendingView});
+

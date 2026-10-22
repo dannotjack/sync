@@ -74,7 +74,7 @@ Refresh all devices after an update. Beta 8 uses protocol lyrics-live/3. Older c
 
 Upload this repository to GitHub Pages using main / (root). CNAME is lyrics.notjack.au. DNS CNAME lyrics points to dannotjack.github.io. Enable HTTPS when available.
 
-Run `npm test` for model and transport tests. No npm install is required. For local demo use `python3 -m http.server 8000` and open `http://localhost:8000/?demo=1`.
+Use Node.js 24.15 or later. Run `npm ci`, then `npm test` for model, transport and Studio workflow tests. The deployed site itself has no build step. For local demo use `python3 -m http.server 8000` and open `http://localhost:8000/?demo=1`.
 
 Uses the VDO.Ninja SDK (MPL-2.0); this application is not affiliated with VDO.Ninja. Use lyrics you have permission to display.
 
@@ -116,14 +116,14 @@ Use the example below. Add a comma between song objects. Use a stable id: changi
 
 If the shared file cannot load or contains errors, the host opens using its saved library and shows a message. Preview/demo continues to use the existing local sample data.
 
-## Lyrics Live Studio
+## Sync Lyrics Studio
 
 Open **https://lyrics.notjack.au/studio/** to prepare songs without starting a session.
 
 - **Master Library**: edit the public song collection as a local working copy. Preview Stage and Projector formatting, import JSON or text, then use **Export master JSON** to download `library.json`. To publish that master library, replace `songs/library.json` in this repository manually. No GitHub credential is entered in Studio.
 - **Local Sets**: create a set, add independent copies of master songs, edit lyrics and section order, and export a portable set JSON. The exported set has `format: "lyrics-live-set"`.
-- **Live app**: on the host, choose **Session options → Import Studio set**, select the exported set JSON, and review the new set in Edit Setlist before going live. This adds songs and a set without replacing the existing library or interrupting the live projection.
-- **Local backup**: use **Backup all** to export a complete Studio copy. Studio autosaves to browser localStorage, which may be cleared by the browser. Keep JSON backups when moving devices.
+- **Live app**: on the host, choose **Setlist → Import Studio set**, select the exported set JSON, and review the new set in Edit Setlist before going live. This adds songs and a set without replacing the existing library or interrupting the live projection.
+- **Local backup**: use **Backup all** to export a complete Studio copy. Studio saves to browser localStorage and shows a persistent warning if saving fails. Invalid stored data is retained for recovery. Browser storage may be cleared by the browser. Keep JSON backups when moving devices.
 - The master format is the existing `{ "version": 1, "songs": [...] }` manifest with an array of text lines per song. The set format is designed separately for import into the live host.
 
 Studio is hosted statically on GitHub Pages, requires no account or cloud database, and uses the existing model parser.
@@ -149,3 +149,6 @@ The three original example songs are removed from the public song manifest and f
 Old default browser libraries are migrated at host startup: **only unmodified** Morning Light / Still Waters / All Things New placeholders are deleted, and a Sunday Worship set made empty by that cleanup is populated with Build My Life. Independently edited songs and real sets remain intact. Studio similarly drops unchanged old sample entries from its local master working copy, without modifying user-created local sets.
 
 If the original source is unavailable, a loading note appears instead of the song text; this doesn't affect other saved songs. The repository retains no copy of Build My Life's lyrics.
+
+
+Studio uses explicit Merge / Replace / Cancel actions for master imports, validates backups before replacing work, and limits local sets to 120 songs. Master and set JSON exports are checked against the 2 MB import limit; Studio backups use an 8 MB limit. Export details distinguish downloaded songs from linked catalogue titles and preserve published source references. On smaller screens, switch between Songs, Editor and Preview. Projector previews use a 16:9 frame and warn about overflow; only `---` creates a slide break. Live devices show Loading lyrics until a full snapshot arrives, with retry guidance for missing hosts.

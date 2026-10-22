@@ -15,7 +15,7 @@ test('snapshot splits into chunks and reassembles only after all parts arrive',a
  const parts=sent.filter(m=>m.message.kind==='snapshot-part');assert.ok(parts.length>=2);
  guest.receive(parts[0].message,'host-uuid');assert.equal(result,null,'must not try to parse an incomplete snapshot');
  for(const {message} of parts.slice(1))guest.receive(message,'host-uuid');
- assert.equal(result.library.length,3);assert.equal(result.rev,sample.rev);assert.equal(result.library[0].source.length,sample.library[0].source.length);
+ assert.equal(result.library.length,sample.library.length);assert.equal(result.rev,sample.rev);assert.equal(result.library[0].source.length,sample.library[0].source.length);
 });
 test('unauthenticated controller commands are rejected at host',async()=>{
  const sent=[];const executed=[];
