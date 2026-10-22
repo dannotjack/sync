@@ -322,7 +322,7 @@ export async function mergeRepositorySongs(state,manifest){
     else{
       const existing=next.library[index],previous=next.repositoryVersions[incoming.id];
       // A local edit is kept. An unchanged shared copy can safely receive GitHub updates.
-      if((previous&&await fingerprint(existing)===previous)||(incoming.id===DEMO_SONG_ID&&existing.source===DEMO_FALLBACK_SOURCE))next.library[index]=incoming;
+      if((previous&&await fingerprint(existing)===previous)||(incoming.id===DEMO_SONG_ID&&existing.source===DEMO_FALLBACK_SOURCE&&incoming.title.toLowerCase()==='build my life'))next.library[index]=incoming;
     }
     next.repositoryVersions[incoming.id]=hashes[i];
   }
