@@ -80,4 +80,5 @@ Uses the VDO.Ninja SDK (MPL-2.0); this application is not affiliated with VDO.Ni
 
 The homepage uses the supplied original photograph without altering it. The title is positioned relative to the photograph’s yellow frame; session controls sit below it. Short windows scroll to preserve usable controls.
 
-Inspired by Ben Yap's project at syncmylyrics.benyap.com
+## Thanks to the OG
+❤️ Inspired by Ben Yap's project at syncmylyrics.benyap.com ❤️
