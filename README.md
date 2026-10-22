@@ -115,3 +115,15 @@ Use the example below. Add a comma between song objects. Use a stable id: changi
 ```
 
 If the shared file cannot load or contains errors, the host opens using its saved library and shows a message. Preview/demo continues to use the existing local sample data.
+
+## Lyrics Live Studio
+
+Open **https://lyrics.notjack.au/studio/** to prepare songs without starting a session.
+
+- **Master Library**: edit the public song collection as a local working copy. Preview Stage and Projector formatting, import JSON or text, then use **Export master JSON** to download `library.json`. To publish that master library, replace `songs/library.json` in this repository manually. No GitHub credential is entered in Studio.
+- **Local Sets**: create a set, add independent copies of master songs, edit lyrics and section order, and export a portable set JSON. The exported set has `format: "lyrics-live-set"`.
+- **Live app**: on the host, choose **Session options → Import Studio set**, select the exported set JSON, and review the new set in Edit Setlist before going live. This adds songs and a set without replacing the existing library or interrupting the live projection.
+- **Local backup**: use **Backup all** to export a complete Studio copy. Studio autosaves to browser localStorage, which may be cleared by the browser. Keep JSON backups when moving devices.
+- The master format is the existing `{ "version": 1, "songs": [...] }` manifest with an array of text lines per song. The set format is designed separately for import into the live host.
+
+Studio is hosted statically on GitHub Pages, requires no account or cloud database, and uses the existing model parser.
