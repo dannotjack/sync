@@ -43,20 +43,53 @@ export function songToText(song) {
   return (song?.sections || []).map(s => `[${s.name}]\n${(s.notes||[]).map(n=>`# ${n}\n`).join('')}${s.pages.map(p => p.join('\n')).join('\n---\n')}`).join('\n\n');
 }
 
+export const DEMO_SONG_ID = 'mattgraham-1gldr6f';
+export const DEMO_FALLBACK_SOURCE = '[Intro]\n# Build My Life loads from the source songbook when online.';
+
+// Older copies of Lyrics Live saved the three original examples to the host browser.
+// Only discard exact unedited examples. Never remove a song whose lyrics were changed.
+const ORIGINAL_DEMO_SIGNATURES = {
+  morning: { title: 'Morning Light', length: 422, hash: '6c9db5b8' },
+  waters: { title: 'Still Waters', length: 255, hash: 'dbd350f3' },
+  new: { title: 'All Things New', length: 153, hash: 'a44421a0' }
+};
+function sourceFingerprint(value) {
+  let hash=2166136261;
+  const text=String(value||'');
+  for(let i=0;i<text.length;i++){hash^=text.charCodeAt(i);hash=Math.imul(hash,16777619);}
+  return (hash>>>0).toString(16);
+}
+export function removeOriginalDemoSongs(state) {
+  const next=structuredClone(state);
+  if(!next||!Array.isArray(next.library)||!Array.isArray(next.sets))return state;
+  const removed=new Set(next.library.filter(song=>{
+    const signature=ORIGINAL_DEMO_SIGNATURES[song.id];
+    return signature && song.title===signature.title && song.source?.length===signature.length && sourceFingerprint(song.source)===signature.hash;
+  }).map(song=>song.id));
+  if(!removed.size)return next;
+  next.library=next.library.filter(song=>!removed.has(song.id));
+  for(const set of next.sets) {
+    const hadDemo=set.songs?.some(id=>removed.has(id));
+    set.songs=(set.songs||[]).filter(id=>!removed.has(id));
+    if(hadDemo && !set.songs.length && set.id==='sunday') {
+      if(!next.library.some(song=>song.id===DEMO_SONG_ID))next.library.push(validSong({id:DEMO_SONG_ID,title:'Build My Life',key:'G',source:DEMO_FALLBACK_SOURCE}));
+      set.songs=[DEMO_SONG_ID];
+    }
+  }
+  next.cursor={song:0,section:0,page:0};
+  next.liveSong=null;
+  return next;
+}
 export function sampleState() {
-  const library = [
-    { id: 'morning', title: 'Morning Light', key: 'G', bpm: 76, source: `[Verse 1]\n[G]When the morning [D]finds us here\n[Em]Hope is rising, [C]clear and near\n---\n[G]Every moment, [D]every breath\n[C]Held in kindness, [G]held in grace\n\n[Chorus]\n# Build gently; all voices in.\n[C]Lead us on into the [G]light\n[D]Hold us through the [Em]darkest night\n---\n[C]Every voice and every [G]song\n[D]Sing of hope that [G]carries on\n\n[Bridge]\n[Em]We will not be [C]overcome\n[G]There's a new day [D]yet to come` },
-    { id: 'waters', title: 'Still Waters', key: 'D', bpm: 68, source: `[Verse 1]\n[D]By the quiet [A]waters stay\n[Bm]Guide my restless [G]heart today\n---\n[D]When the road is [A]hard to see\n[G]Walk the winding [D]path with me\n\n[Chorus]\n[G]Peace like a river, [D]steady and deep\n[A]Love that will hold me, [Bm]love that will keep` },
-    { id: 'new', title: 'All Things New', key: 'C', bpm: 80, source: `[Verse 1]\n[C]Here at the [G]turning of the tide\n[Am]Hope is [F]awakening inside\n\n[Chorus]\n[F]You make [C]all things new\n[G]The morning [Am]breaks through` }
-  ].map(s => ({ ...s, sections: parseSongText(s.source) }));
+  const library=[validSong({id:DEMO_SONG_ID,title:'Build My Life',key:'G',source:DEMO_FALLBACK_SOURCE})];
   return {
     rev: 1,
     sessionName: 'Sunday Worship',
     library,
-    sets: [{ id: 'sunday', name: 'Sunday Worship', songs: ['morning', 'waters', 'new'] }],
-    activeSetId: 'sunday',
-    cursor: { song: 0, section: 1, page: 0 },
-    blank: false
+    sets: [{ id:'sunday',name:'Sunday Worship',songs:[DEMO_SONG_ID] }],
+    activeSetId:'sunday',
+    cursor:{song:0,section:0,page:0},
+    blank:false
   };
 }
 
@@ -289,7 +322,7 @@ export async function mergeRepositorySongs(state,manifest){
     else{
       const existing=next.library[index],previous=next.repositoryVersions[incoming.id];
       // A local edit is kept. An unchanged shared copy can safely receive GitHub updates.
-      if(previous&&await fingerprint(existing)===previous)next.library[index]=incoming;
+      if((previous&&await fingerprint(existing)===previous)||(incoming.id===DEMO_SONG_ID&&existing.source===DEMO_FALLBACK_SOURCE))next.library[index]=incoming;
     }
     next.repositoryVersions[incoming.id]=hashes[i];
   }
