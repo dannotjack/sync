@@ -129,7 +129,7 @@ function wordmark(){return `<span class="brand-name">Sync Lyrics</span>`;}
 function welcome(){return `<div class="photo-home"><img class="home-photo" src="./assets/home-room.jpg" width="1376" height="768" alt="" fetchpriority="high"><header class="photo-title"><h1>Sync Lyrics</h1><p class="photo-credit">not jack.</p></header><main class="photo-controls"><p class="photo-tagline">Peer-to-peer lyrics syncing.</p>
 <button class="btn primary wide large" data-action="show-create">Create session ${icon('plus',18)}</button>
 <div class="home-divider">or join</div><form id="join-form"><label for="join-code">SESSION CODE</label><div class="join-inline"><input id="join-code" name="code" class="code-input" placeholder="A7K92B" maxlength="6" autocomplete="off" autocapitalize="characters" value="${escape(app.pendingCode)}" required><button class="btn outline" type="submit">Join ${icon('right',17)}</button></div></form>
-<button class="demo-link" data-action="preview">Try demo ${icon('right',15)}</button></main></div>`;}
+<button class="demo-link" data-action="preview">Try demo ${icon('right',15)}</button><a class="demo-link" href="./studio/" style="display:block;text-align:center;margin-top:12px;color:#f3d569;text-decoration:none">Open Lyrics Live Studio →</a></main></div>`;}
 function createView(){return `<div class="welcome-shell"><header class="welcome-top"><div class="brand">${wordmark()}</div><button class="quiet-btn" data-action="home">${icon('left',16)} Back</button></header><main class="form-shell"><h1 class="form-title">Create session</h1><p class="intro">Keep this browser open and this device awake.</p><form id="create-form" class="form-card">
   <label for="create-name">SESSION NAME</label><input id="create-name" name="name" value="Sunday Worship" maxlength="80" required>
   <label for="create-password">CONTROL PASSWORD</label><input id="create-password" name="password" type="password" minlength="6" maxlength="100" autocomplete="new-password" placeholder="At least 6 characters" required>
@@ -215,6 +215,7 @@ function modal(){if(app.showInvite && (app.screen==='session'||app.screen==='dem
   if(app.modal==='connect-failed')return wrap(`${close}<span class="modal-symbol">${icon('wifi',24)}</span><h2>Connection unavailable</h2><p>The signaling connection couldn't start. Check your internet connection and make sure the VDO.Ninja SDK isn't blocked.</p><button class="btn primary wide" data-action="leave">Return home</button>`);
   if(app.modal==='create-set')return wrap(`${close}<h2>Create a set</h2><p>Organize songs for another service or rehearsal.</p><form id="create-set-form"><label>SET NAME</label><input name="name" maxlength="80" placeholder="Friday Night Worship" required><button type="submit" class="btn primary wide large">Create set</button></form>`);
   if(app.modal==='rename-set')return wrap(`${close}<h2>Rename set</h2><form id="rename-set-form"><label>SET NAME</label><input name="name" maxlength="80" value="${escape(setName())}" required><button type="submit" class="btn primary wide large">Save name</button></form>`);
+  if(app.modal==='import-set')return wrap(`${close}<h2>Import prepared set</h2><p>Choose a JSON set exported from Lyrics Live Studio. Songs are added to the host's library with new IDs, preserving all existing sets. Nothing currently live changes.</p><button class="btn primary wide large" data-action="choose-set-import">Choose set JSON</button>`);
   if(app.modal==='library')return wrap(`<div class="modal-wide">${close}<div class="overline">SONG LIBRARY</div><h2>Your songs</h2><p>Add songs to the set or create a song.</p><p class="help"><a class="github-library-link" href="https://github.com/dannotjack/sync/edit/main/songs/library.json" target="_blank" rel="noopener noreferrer">Edit shared library on GitHub ${icon('external',13)}</a> · Loads when a host session starts. App edits stay with the host.</p><div class="library-list">${app.data.library.map(song=>`<div class="library-entry"><div><strong>${escape(song.title)}</strong><small>Key ${escape(song.key||'—')} · ${song.sections.length} sections</small></div><div class="mini-actions"><button data-action="edit-song" data-id="${escape(song.id)}" title="Edit song">${icon('edit',17)}</button><button data-action="add-song" data-id="${escape(song.id)}" title="Add to set">${icon('plus',20)}</button></div></div>`).join('')}</div><button class="btn primary wide large" data-action="new-song">${icon('plus',17)} Create new song</button></div>`);
   if(app.modal==='song-editor'){
     const song=app.editor||{id:'',title:'',key:'',bpm:0,order:'',source:''};
@@ -222,7 +223,7 @@ function modal(){if(app.showInvite && (app.screen==='session'||app.screen==='dem
   }
   return '';
 }
-function inviteModal(){return `<div class="modal-backdrop" data-action="close-invite"><div class="modal-card" role="dialog" aria-modal="true" ><button class="icon-button close-modal" data-action="close-invite" aria-label="Close">${icon('close')}</button><div class="overline">YOUR LIVE SESSION</div><h2>Invite your team</h2><p>Open the same website on another device and enter the code. Or share the link.</p><div class="code-display">${escape(app.code)}</div><div class="invite-link">${escape(sessionLink())}</div><div class="invite-actions"><button class="btn primary" data-action="copy-link">${icon('link',16)} Copy invite link</button><button class="btn outline" data-action="open-projector">${icon('external',16)} Open projector tab</button></div><div class="modal-note">${app.screen==='demo'?'Demo mode does not connect to other devices.':'Keep the host browser open and prevent the computer from sleeping.'}</div><div class="modal-divider"></div><div class="backups"><button data-action="export">${icon('download',18)} Export backup</button>${app.isHost?`<button data-action="import">${icon('upload',18)} Import backup</button>`:''}</div><button class="btn outline wide" data-action="leave">${icon('left',17)} ${app.isHost?'End host session':'Leave session'}</button></div></div>`;}
+function inviteModal(){return `<div class="modal-backdrop" data-action="close-invite"><div class="modal-card" role="dialog" aria-modal="true" ><button class="icon-button close-modal" data-action="close-invite" aria-label="Close">${icon('close')}</button><div class="overline">YOUR LIVE SESSION</div><h2>Invite your team</h2><p>Open the same website on another device and enter the code. Or share the link.</p><div class="code-display">${escape(app.code)}</div><div class="invite-link">${escape(sessionLink())}</div><div class="invite-actions"><button class="btn primary" data-action="copy-link">${icon('link',16)} Copy invite link</button><button class="btn outline" data-action="open-projector">${icon('external',16)} Open projector tab</button></div><div class="modal-note">${app.screen==='demo'?'Demo mode does not connect to other devices.':'Keep the host browser open and prevent the computer from sleeping.'}</div><div class="modal-divider"></div><div class="backups">${app.isHost?'<button data-action="show-set-import">Import Studio set</button>':''}<button data-action="export">${icon('download',18)} Export backup</button>${app.isHost?`<button data-action="import">${icon('upload',18)} Import backup</button>`:''}</div><button class="btn outline wide" data-action="leave">${icon('left',17)} ${app.isHost?'End host session':'Leave session'}</button></div></div>`;}
 let renderedModalKey='';
 function render(){
   const el=$('#app');if(!el)return;
@@ -300,6 +301,8 @@ async function handleAction(btn){
   }
   if(action==='export')downloadJson();
   if(action==='import')$('#backup-input').click();
+  if(action==='show-set-import'){app.showInvite=false;app.modal='import-set';render();}
+  if(action==='choose-set-import')$('#set-import-input').click();
   if(action==='leave'){
     if(app.isHost&&!confirm('End hosting? Other devices will lose live synchronization.'))return;
     await leave();
@@ -351,6 +354,25 @@ document.addEventListener('keydown',async e=>{
   if(e.key==='ArrowLeft'||e.key==='ArrowUp'){e.preventDefault();await dispatch({kind:'step',dir:-1});}
   if(e.key.toLowerCase()==='b'){e.preventDefault();await dispatch({kind:'blank',value:!app.data.blank});}
   }catch(error){toast(error.message);}
+});
+const setImportInput=document.createElement('input');setImportInput.type='file';setImportInput.id='set-import-input';setImportInput.accept='.json,application/json';setImportInput.hidden=true;document.body.appendChild(setImportInput);
+setImportInput.addEventListener('change',async()=>{
+ const file=setImportInput.files?.[0];setImportInput.value='';if(!file)return;
+ if(!app.isHost||!app.data){toast('Only the host can import a set.');return;}
+ try{
+  if(file.size>2_000_000)throw new Error('Set file exceeds 2 MB.');
+  const manifest=JSON.parse(await file.text());
+  if(manifest.format!=='lyrics-live-set'||manifest.version!==1||!Array.isArray(manifest.songs)||manifest.songs.length>120)throw new Error('Choose a set exported by Lyrics Live Studio.');
+  const prepared=manifest.songs.map(item=>validSong({...item,id:crypto.randomUUID()}));
+  if(app.data.library.length+prepared.length>300)throw new Error('Library cannot exceed 300 songs.');
+  if(app.data.sets.length>=50)throw new Error('Maximum 50 sets reached.');
+  const next=structuredClone(app.data);
+  next.library.push(...prepared);
+  const set={id:crypto.randomUUID(),name:String(manifest.name||'Imported set').trim().slice(0,80)||'Imported set',songs:prepared.map(song=>song.id)};
+  next.sets.push(set);next.rev=(Number(next.rev)||0)+1;
+  app.data=next;app.editSetId=set.id;app.editingSet=true;app.tab='setlist';app.modal='';
+  persist();app.peer?.sendSnapshot();render();toast('Imported set safely. Review it before Go live.');
+ }catch(e){toast(e.message||'Set import failed.');}
 });
 const backupInput=document.createElement('input');backupInput.id='backup-input';backupInput.type='file';backupInput.accept='.json,application/json';backupInput.hidden=true;document.body.appendChild(backupInput);
 backupInput.addEventListener('change',async()=>{
