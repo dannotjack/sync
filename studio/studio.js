@@ -1,4 +1,4 @@
-import {parseSongText,arrangeSections,validSong,chordSegments,validateImport} from '../src/model.js?v=beta9';
+import {parseSongText,arrangeSections,validSong,chordSegments,validateImport} from '../src/model.js?v=beta10';
 import {setupOnSongBrowser} from './source-import.js';
 import {onsongId,convertOnSong,onSongRawUrl} from './onsong.js';
 const $=s=>document.querySelector(s);
@@ -13,7 +13,20 @@ let state=empty(),mode='master',selected='',setId='',display='stage',importMode=
 let msgTimer;
 function notify(t){$('#toast').textContent=t;clearTimeout(msgTimer);msgTimer=setTimeout(()=>$('#toast').textContent='',4600);}
 function normalize(entry){return {id:String(entry.id||uid()),title:String(entry.title||''),key:String(entry.key||''),bpm:Number(entry.bpm)||0,order:String(entry.order||''),source:typeof entry.source==='string'?entry.source:(Array.isArray(entry.lyrics)?entry.lyrics.join('\n'):''),artist:String(entry.artist||''),ccli:String(entry.ccli||''),origin:String(entry.origin||''),originPath:String(entry.originPath||'')};}
-function safeLoad(){try{const saved=JSON.parse(localStorage.getItem(LS)||'null');if(saved&&Array.isArray(saved.songs)&&Array.isArray(saved.sets)){state={version:1,songs:saved.songs.map(normalize),sets:saved.sets.map(s=>({id:s.id||uid(),name:s.name||'Untitled Set',songs:(s.songs||[]).map(normalize)}))};modified=!!saved.modified;return true;}}catch(e){console.warn(e)}return false;}
+const oldExamples={
+  morning:{title:'Morning Light',length:422,hash:'6c9db5b8'},
+  waters:{title:'Still Waters',length:255,hash:'dbd350f3'},
+  new:{title:'All Things New',length:153,hash:'a44421a0'}
+};
+function untouchedExample(song){
+  const sig=oldExamples[song.id];
+  if(!sig||song.title!==sig.title||song.source?.length!==sig.length)return false;
+  let hash=2166136261;
+  for(const char of song.source){hash^=char.charCodeAt(0);hash=Math.imul(hash,16777619);}
+  return (hash>>>0).toString(16)===sig.hash;
+}
+function cleanOldStudioExamples(){state.songs=state.songs.filter(song=>!untouchedExample(song));}
+function safeLoad(){try{const saved=JSON.parse(localStorage.getItem(LS)||'null');if(saved&&Array.isArray(saved.songs)&&Array.isArray(saved.sets)){state={version:1,songs:saved.songs.map(normalize),sets:saved.sets.map(s=>({id:s.id||uid(),name:s.name||'Untitled Set',songs:(s.songs||[]).map(normalize)}))};modified=!!saved.modified;cleanOldStudioExamples();return true;}}catch(e){console.warn(e)}return false;}
 function persist(){localStorage.setItem(LS,JSON.stringify({...state,modified}));}
 function masterEntries(){
  const localIds=new Set(state.songs.map(s=>s.id));
@@ -90,7 +103,7 @@ async function pickMaster(){
 }
 async function applyImport(data,filename){if(importMode==='text'){const s={id:uid(),title:filename.replace(/\.[^.]+$/,'')||'Imported song',key:'',bpm:0,order:'',source:String(data)};list().push(s);selected=s.id;return 'Imported text as a song.';}
 if(data?.format==='lyrics-live-set'&&Array.isArray(data.songs)){const newSet={id:uid(),name:String(data.name||'Imported Set'),songs:data.songs.map(s=>({...normalize(s),id:uid()}))};state.sets.push(newSet);mode='sets';setId=newSet.id;selected=newSet.songs[0]?.id||'';return 'Imported local set.';}
-if(data?.version===1&&Array.isArray(data.songs)){const entries=data.songs.map(normalize);for(const s of entries){validSong(s);}const replace=confirm('Import '+entries.length+' master songs?\nOK replaces the master working library.\nCancel merges by song ID, keeping other songs.');if(replace)state.songs=entries;else for(const song of entries){const i=state.songs.findIndex(x=>x.id===song.id);if(i>=0)state.songs[i]=song;else state.songs.push(song);}mode='master';selected=entries[0]?.id||'';return 'Imported '+entries.length+' master songs.';}
+if(data?.version===1&&Array.isArray(data.songs)){const entries=data.songs.filter(s=>!s.sourceOnly).map(normalize);for(const s of entries){validSong(s);}const replace=confirm('Import '+entries.length+' master songs?\nOK replaces the master working library.\nCancel merges by song ID, keeping other songs.');if(replace)state.songs=entries;else for(const song of entries){const i=state.songs.findIndex(x=>x.id===song.id);if(i>=0)state.songs[i]=song;else state.songs.push(song);}mode='master';selected=entries[0]?.id||'';return 'Imported '+entries.length+' master songs.';}
 if(data&&Array.isArray(data.library)&&Array.isArray(data.sets)){const backup=validateImport(data);const newSet={id:uid(),name:backup.sessionName||'Imported set',songs:[]};const active=backup.sets.find(x=>x.id===backup.activeSetId)||backup.sets[0];newSet.songs=(active?.songs||[]).map(id=>backup.library.find(s=>s.id===id)).filter(Boolean).map(s=>({...normalize(s),id:uid()}));state.sets.push(newSet);mode='sets';setId=newSet.id;selected=newSet.songs[0]?.id||'';return 'Imported Lyrics Live backup as local set.';}
 if(data?.format==='lyrics-live-studio-backup'&&data.state){if(!confirm('Replace all Studio work with this backup?'))return 'Import cancelled.';state=data.state;mode='master';selected=state.songs[0]?.id||'';setId=state.sets[0]?.id||'';return 'Restored Studio backup.';}
 throw Error('Unsupported JSON. Choose a master library, Studio backup, Lyrics Live backup or exported set.');
@@ -128,5 +141,5 @@ if(a==='import'){const choice=prompt('Import type:\n1 = JSON library / set / bac
 if(a==='refresh-master'){if(!confirm('Fetch the published GitHub master library? Unexported master edits could be overwritten where IDs match.'))return;const res=await fetch('../songs/library.json?time='+Date.now(),{cache:'no-store'});if(!res.ok)throw Error('Cannot load published library');const m=await res.json();const old=importMode;importMode='master';const message=await applyImport(m,'library.json');importMode=old;modified=true;persist();render();notify(message);return;}
 }catch(err){notify(err.message||'Something went wrong.');}});
 $('#import-file').addEventListener('change',async e=>{const file=e.target.files?.[0];e.target.value='';if(!file)return;try{if(file.size>2000000)throw Error('File is too large (2 MB maximum).');const raw=await file.text();const data=importMode==='text'?raw:JSON.parse(raw);const result=await applyImport(data,file.name);modified=true;persist();render();notify(result);}catch(err){notify(err.message||'Import failed.');}});
-async function init(){onsongBrowser=setupOnSongBrowser({isImported:id=>state.songs.some(s=>s.id===id),addSongs:items=>{let added=0,skipped=0;for(const raw of items){try{const item=normalize(raw);validSong(item);if(state.songs.some(s=>s.id===item.id)||state.songs.length>=1000){skipped++;continue;}state.songs.push(item);added++;}catch(e){skipped++;console.warn('Skipped OnSong:',e);}}if(added){modified=true;persist();mode='master';render();}return {added,skipped};},notify});const saved=safeLoad();if(!saved){try{const response=await fetch('../songs/library.json',{cache:'no-store'});if(response.ok){const manifest=await response.json();if(manifest.version===1&&Array.isArray(manifest.songs))state.songs=manifest.songs.map(normalize);}}catch(e){console.warn('Published library unavailable',e);}persist();}setId=state.sets[0]?.id||'';selected=state.songs[0]?.id||'';await loadCatalog();render();}
+async function init(){onsongBrowser=setupOnSongBrowser({isImported:id=>state.songs.some(s=>s.id===id),addSongs:items=>{let added=0,skipped=0;for(const raw of items){try{const item=normalize(raw);validSong(item);if(state.songs.some(s=>s.id===item.id)||state.songs.length>=1000){skipped++;continue;}state.songs.push(item);added++;}catch(e){skipped++;console.warn('Skipped OnSong:',e);}}if(added){modified=true;persist();mode='master';render();}return {added,skipped};},notify});const saved=safeLoad();if(!saved){try{const response=await fetch('../songs/library.json',{cache:'no-store'});if(response.ok){const manifest=await response.json();if(manifest.version===1&&Array.isArray(manifest.songs))state.songs=manifest.songs.filter(s=>!s.sourceOnly).map(normalize);}}catch(e){console.warn('Published library unavailable',e);}persist();}cleanOldStudioExamples();persist();setId=state.sets[0]?.id||'';selected=state.songs[0]?.id||'';await loadCatalog();render();}
 init();
