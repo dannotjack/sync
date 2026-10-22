@@ -127,3 +127,11 @@ Open **https://lyrics.notjack.au/studio/** to prepare songs without starting a s
 - The master format is the existing `{ "version": 1, "songs": [...] }` manifest with an array of text lines per song. The set format is designed separately for import into the live host.
 
 Studio is hosted statically on GitHub Pages, requires no account or cloud database, and uses the existing model parser.
+
+### Import the Matt Graham OnSong collection
+
+In **Studio → Master Library → Browse OnSong collection**, browse the metadata-only index of 677 `.onsong` files from [mattgraham/worship](https://github.com/mattgraham/worship). Filter by song name, select multiple entries or choose **Import all missing**. Studio retrieves files directly from a pinned public GitHub revision and converts their inline chords, headings, key and tempo into the existing Lyrics Live song syntax **in the current browser**. Importing is incremental and preserves pre-existing master songs and locally edited versions that already use the same source ID.
+
+The app does **not** embed or publish the upstream lyrics in its repository. The source contains modern worship songs and does not provide an explicit redistribution licence. Ensure you have permission for your intended copying, display, or publication. The importer is for creating a local working library; publishing exported lyrics to a public repository is a separate rights decision.
+
+The Studio library accommodates up to 1000 entries. A very large master library may produce a large host snapshot; for reliable live projection, importing only the songs needed for a set remains preferable. Keep browser backups when importing hundreds of songs.
