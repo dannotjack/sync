@@ -1,4 +1,4 @@
-# Sync Lyrics · v1.0 Beta 8
+# Sync Lyrics · v1.0 Beta 10
 
 Peer-to-peer lyrics syncing for Projector, Stage and Control. Static HTML, CSS and JavaScript hosted on GitHub Pages at https://lyrics.notjack.au.
 
@@ -141,3 +141,11 @@ The Studio library accommodates up to 1000 entries. A very large master library 
 The Master Library view automatically includes all **677 source song titles** from the pinned Matt Graham OnSong catalogue alongside the library's existing songs. The public repository contains only the filenames and source references for this collection. Searching and choosing a linked title downloads just that song into the current browser for editing and preview; adding one to a local set creates an independent local copy. Local edits are preserved on the device.
 
 Exporting `library.json` includes only locally created, edited or individually downloaded songs, **not** linked-only source entries. Neither the upstream lyrics nor a full copy of the collection is committed to the public site. This allows people to discover a large catalogue while remaining mindful of copyright and copying permissions. The existing **Bulk import OnSong** option remains available for local bulk loading.
+
+## Current starter demo
+
+The three original example songs are removed from the public song manifest and from new browser sessions. **Build My Life** is the only starter demo, in both the live app demo and new host library. `songs/library.json` stores a pinned external OnSong reference rather than reproducing its copyrighted lyrics in this repository. The visitor's browser retrieves it on demand from the upstream public songbook; an internet connection and access to GitHub's raw-content host are needed.
+
+Old default browser libraries are migrated at host startup: **only unmodified** Morning Light / Still Waters / All Things New placeholders are deleted, and a Sunday Worship set made empty by that cleanup is populated with Build My Life. Independently edited songs and real sets remain intact. Studio similarly drops unchanged old sample entries from its local master working copy, without modifying user-created local sets.
+
+If the original source is unavailable, a loading note appears instead of the song text; this doesn't affect other saved songs. The repository retains no copy of Build My Life's lyrics.
