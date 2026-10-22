@@ -1,5 +1,6 @@
-import { STORAGE_KEY, sampleState, validateImport, validSong, songToText, applyAction, activeSet, activeSong, activeSection, atStart, atEnd, chordSegments, SONG_SYNTAX_EXAMPLE, parseSongText, arrangeSections, mergeRepositorySongs } from './model.js?v=beta9';
-import { LyricsPeer } from './sync.js?v=beta9';
+import { STORAGE_KEY, sampleState, validateImport, validSong, songToText, applyAction, activeSet, activeSong, activeSection, atStart, atEnd, chordSegments, SONG_SYNTAX_EXAMPLE, parseSongText, arrangeSections, mergeRepositorySongs, removeOriginalDemoSongs, DEMO_SONG_ID } from './model.js?v=beta10';
+import {convertOnSong,onSongRawUrl} from '../studio/onsong.js';
+import { LyricsPeer } from './sync.js?v=beta10';
 const $ = (query, root=document) => root.querySelector(query);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icon = (name, size=20) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${({
@@ -35,10 +36,10 @@ function loadSaved(){
   try {
     const raw=localStorage.getItem(STORAGE_KEY);
     if(!raw)return sampleState();
-    const saved=JSON.parse(raw), clean=validateImport(saved);
+    const saved=JSON.parse(raw), clean=removeOriginalDemoSongs(validateImport(saved));
     clean.activeSetId=clean.sets.some(x=>x.id===saved.activeSetId)?saved.activeSetId:clean.sets[0].id;
     const cursor=saved.cursor;
-    if(cursor && Number.isInteger(cursor.song)&&Number.isInteger(cursor.section)&&Number.isInteger(cursor.page))clean.cursor=cursor;
+    if(cursor && Number.isInteger(cursor.song)&&Number.isInteger(cursor.section)&&Number.isInteger(cursor.page)&&!saved.library.some(item=>['morning','waters','new'].includes(item.id)&&!clean.library.some(x=>x.id===item.id)))clean.cursor=cursor;
     clean.blank=true;
     return clean;
   }catch(e){console.warn('Could not load library, using sample data',e);return sampleState();}
@@ -51,6 +52,21 @@ async function loadRepositorySongs(state){
     if(!response.ok)throw new Error('Library file could not load.');
     const text=await response.text();if(text.length>2000000)throw new Error('Library file exceeds 2 MB.');
     let manifest;try{manifest=JSON.parse(text);}catch{throw new Error('Check the JSON formatting in songs/library.json.');}
+    if(manifest?.version===1&&Array.isArray(manifest.songs)) {
+      // Repository stores references, not redistributed lyric text. Resolve only the
+      // requested source song in the visitor's browser before validating the manifest.
+      manifest.songs=await Promise.all(manifest.songs.map(async entry=>{
+        if(!entry.sourceOnly)return entry;
+        if(entry.origin!=='mattgraham/worship'||typeof entry.originPath!=='string'||!/^[a-f0-9]{40}$/.test(entry.sourceRevision||''))throw new Error('Unknown external song source.');
+        const sourceUrl=onSongRawUrl(entry.sourceRevision,entry.originPath);
+        const original=await fetch(sourceUrl,{signal:abort.signal});
+        if(!original.ok)throw new Error('Could not load Build My Life from its original songbook ('+original.status+').');
+        const text=await original.text();
+        if(text.length>100000)throw new Error('Song source is too large.');
+        const converted=convertOnSong(text,entry.originPath);
+        return {...entry,title:converted.title,key:converted.key,bpm:converted.bpm,lyrics:converted.source.split('\n')};
+      }));
+    }
     return await mergeRepositorySongs(state,manifest);
   }finally{clearTimeout(timer);}
 }
@@ -119,7 +135,16 @@ async function leave(){
   const peer=app.peer;app.peer=null;app.screen='welcome';app.status='idle';app.isHost=false;app.data=null;app.authorized=false;app.showInvite=false;app.modal='';app.editingSet=false;
   render();await peer?.close();
 }
-function preview(){app.screen='demo';app.isHost=true;app.role='control';app.authorized=true;app.code='DEMO';app.status='idle';app.data=loadSaved();app.showInvite=false;render();}
+async function preview(){
+  app.screen='demo';app.isHost=true;app.role='control';app.authorized=true;app.code='DEMO';app.status='idle';
+  // Demo is isolated from users' real locally saved libraries and setlists.
+  app.data=sampleState();app.showInvite=false;render();
+  try {
+    const hydrated=await loadRepositorySongs(app.data);
+    if(app.screen!=='demo')return;
+    app.data=hydrated;app.data.liveSong=structuredClone(activeSong(hydrated));render();
+  }catch(error){if(app.screen==='demo')toast('Build My Life could not load. Check your connection. '+error.message);}
+}
 function jumpLocal(role){
   if(role==='control'&&!canControl()){app.modal='auth';render();return;}
   app.role=role;app.tab='lyrics';app.follow=true;app.scrollTop=0;render();followLive();
@@ -263,7 +288,7 @@ async function handleAction(btn){
   const action=btn.dataset.action;
   if(action==='show-create'){app.screen='create';render();}
   if(action==='home'){app.screen='welcome';app.pendingView='';render();}
-  if(action==='preview'){preview();}
+  if(action==='preview'){await preview();}
   if(action==='close-modal'){app.modal='';render();}
   if(action==='close-invite'){app.showInvite=false;render();}
   if(action==='invite'){app.showInvite=true;render();}
