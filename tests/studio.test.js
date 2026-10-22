@@ -19,7 +19,7 @@ async function studio(t,{saved={version:1,songs:[song()],sets:[]},fetcher}={}){
  w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};
  w.HTMLDialogElement.prototype.close=function(){this.open=false;};
  if(saved!==null)w.localStorage.setItem('lyrics-live-studio-v1',typeof saved==='string'?saved:JSON.stringify(saved));
- w.fetch=fetcher||(async()=>({ok:true,json:async()=>({version:1,files:[],count:0,commit:'a'.repeat(40)})}));
+ w.fetch=fetcher||(async url=>({ok:true,json:async()=>String(url).includes('library.json')?{version:1,songs:[]}:{version:1,files:[],count:0,commit:'a'.repeat(40)}}));
  w.eval(script);await tick();
  return {w,click:action=>{const button=w.document.querySelector('[data-action="'+action+'"]');assert.ok(button,action+' exists');button.click();},stored:()=>JSON.parse(w.localStorage.getItem('lyrics-live-studio-v1')),input:(id,value)=>{const el=w.document.getElementById(id);assert.ok(el,id+' exists');el.value=value;el.dispatchEvent(new w.Event('input',{bubbles:true}));}};
 }

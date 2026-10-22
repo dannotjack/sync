@@ -1,5 +1,5 @@
 import {parseSongText,arrangeSections,validSong,chordSegments,SONG_SYNTAX_EXAMPLE} from '../src/model.js?v=beta11';
-import {normalize,validateStudioState,validateSet,masterManifest,backupToSet,encodeDownload,sourceReferences,LIMITS} from './state.js?v=beta11';
+import {normalize,validateStudioState,validateSet,masterManifest,backupToSet,encodeDownload,sourceReferences,mergePublishedDefaults,LIMITS} from './state.js?v=beta12';
 import {setupOnSongBrowser} from './source-import.js?v=beta11';
 import {onsongId,convertOnSong,onSongRawUrl} from './onsong.js';
 const $=s=>document.querySelector(s);
@@ -214,8 +214,8 @@ async function init(){
  let saved=false;try{saved=safeLoad();}catch(error){storageFailed=true;savingState='Browser storage unavailable';}
  setId=state.sets[0]?.id||'';selected=state.songs[0]?.id||'';render();
  const catalogueTask=loadCatalog().then(()=>render());
- if(!saved&&!storageFailed){
-  try{const response=await fetch('../songs/library.json',{cache:'no-store',signal:AbortSignal.timeout(15000)});if(!response.ok)throw Error('Could not fetch published songs.');const manifest=await response.json();if(manifest.version!==1||!Array.isArray(manifest.songs))throw Error('Invalid published library.');const published=manifest.songs.filter(song=>!song.sourceOnly).map(song=>normalize(song));state.songs=[...new Map([...published,...state.songs].map(song=>[song.id,song])).values()];state.references=sourceReferences(manifest.songs.filter(song=>song.sourceOnly));selected=selected||state.songs[0]?.id||'';persist();}
+ if(!storageFailed){
+  try{const response=await fetch('../songs/library.json',{cache:'no-store',signal:AbortSignal.timeout(15000)});if(!response.ok)throw Error('Could not fetch published songs.');const manifest=await response.json();state=mergePublishedDefaults(state,manifest);selected=selected||state.songs[0]?.id||'';persist();}
   catch(error){notify('Published songs unavailable. You can create or import songs, or retry Fetch published songs.');}
  }
  await catalogueTask;render();

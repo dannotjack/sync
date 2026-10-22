@@ -144,11 +144,11 @@ Exporting `library.json` includes only locally created, edited or individually d
 
 ## Current starter demo
 
-The three original example songs are removed from the public song manifest and from new browser sessions. **Build My Life** is the only starter demo, in both the live app demo and new host library. `songs/library.json` stores a pinned external OnSong reference rather than reproducing its copyrighted lyrics in this repository. The visitor's browser retrieves it on demand from the upstream public songbook; an internet connection and access to GitHub's raw-content host are needed.
+The default **Common Worship** library contains the 57 songs supplied in `common-worship.json`. Their complete lyrics, chords, headings, slide breaks and stage notes are stored in `songs/library.json`, so these prepared songs do not depend on a live download from the external songbook. Source-based stable IDs match catalogue entries, including the Build My Life demo. New host sessions load this library automatically; existing hosts retain their locally edited songs and sets. Studio adds missing published songs on every visit, including browsers with previously saved work, while preserving local edits and independent sets.
 
 Old default browser libraries are migrated at host startup: **only unmodified** Morning Light / Still Waters / All Things New placeholders are deleted, and a Sunday Worship set made empty by that cleanup is populated with Build My Life. Independently edited songs and real sets remain intact. Studio similarly drops unchanged old sample entries from its local master working copy, without modifying user-created local sets.
 
-If the original source is unavailable, a loading note appears instead of the song text; this doesn't affect other saved songs. The repository retains no copy of Build My Life's lyrics.
+Build My Life remains the starter demo. Its prepared version now loads from the built-in library. The larger external catalogue is still available for finding additional songs.
 
 
 Studio uses explicit Merge / Replace / Cancel actions for master imports, validates backups before replacing work, and limits local sets to 120 songs. Master and set JSON exports are checked against the 2 MB import limit; Studio backups use an 8 MB limit. Export details distinguish downloaded songs from linked catalogue titles and preserve published source references. On smaller screens, switch between Songs, Editor and Preview. Projector previews use a 16:9 frame and warn about overflow; only `---` creates a slide break. Live devices show Loading lyrics until a full snapshot arrives, with retry guidance for missing hosts.

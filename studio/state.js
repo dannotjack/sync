@@ -65,6 +65,17 @@ export function masterManifest(state) {
   return {version:1,songs};
 }
 
+// Built-in songs are added on every visit, including browsers with saved work.
+// A local song with the same ID keeps its edits; local sets remain independent.
+export function mergePublishedDefaults(state,manifest) {
+  if(manifest?.version!==1||!Array.isArray(manifest.songs)||manifest.songs.length>LIMITS.songs)throw Error('Invalid published library.');
+  const published=unique(manifest.songs.filter(song=>!song?.sourceOnly).map(song=>normalize(song)),'published song');
+  const references=unique(sourceReferences(manifest.songs.filter(song=>song?.sourceOnly)),'source');
+  const songs=[...new Map([...published,...state.songs].map(song=>[song.id,song])).values()];
+  if(new Set([...songs,...references].map(song=>song.id)).size>LIMITS.songs)throw Error('Maximum 1000 master songs.');
+  return {...state,songs,references};
+}
+
 export function backupToSet(data) {
   const backup=validateImport(data);
   const active=backup.sets.find(s=>s.id===data.activeSetId)||backup.sets[0];
