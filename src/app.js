@@ -1,5 +1,5 @@
-import { STORAGE_KEY, sampleState, validateImport, validSong, songToText, applyAction, activeSet, activeSong, activeSection, atStart, atEnd, chordSegments, SONG_SYNTAX_EXAMPLE, parseSongText, arrangeSections } from './model.js?v=beta7';
-import { LyricsPeer } from './sync.js?v=beta7';
+import { STORAGE_KEY, sampleState, validateImport, validSong, songToText, applyAction, activeSet, activeSong, activeSection, atStart, atEnd, chordSegments, SONG_SYNTAX_EXAMPLE, parseSongText, arrangeSections, mergeRepositorySongs } from './model.js?v=beta8';
+import { LyricsPeer } from './sync.js?v=beta8';
 const $ = (query, root=document) => root.querySelector(query);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icon = (name, size=20) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${({
@@ -44,6 +44,16 @@ function loadSaved(){
   }catch(e){console.warn('Could not load library, using sample data',e);return sampleState();}
 }
 function persist(){if(app.isHost&&app.screen!=='demo'&&app.data){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(app.data));}catch(e){toast('Browser storage is full. Export a backup.');}}}
+async function loadRepositorySongs(state){
+  const abort=new AbortController();const timer=setTimeout(()=>abort.abort(),5000);
+  try{
+    const response=await fetch(new URL('./songs/library.json',location.href),{cache:'no-store',signal:abort.signal});
+    if(!response.ok)throw new Error('Library file could not load.');
+    const text=await response.text();if(text.length>2000000)throw new Error('Library file exceeds 2 MB.');
+    let manifest;try{manifest=JSON.parse(text);}catch{throw new Error('Check the JSON formatting in songs/library.json.');}
+    return await mergeRepositorySongs(state,manifest);
+  }finally{clearTimeout(timer);}
+}
 function sessionCode(){const abc='ABCDEFGHJKLMNPQRSTUVWXYZ23456789',r=new Uint32Array(6);crypto.getRandomValues(r);return [...r].map(n=>abc[n%abc.length]).join('');}
 function sessionLink(view=''){const url=new URL(location.href);url.search='';url.hash='';url.searchParams.set('join',app.code);if(view)url.searchParams.set('view',view);return url.toString();}
 const params=new URLSearchParams(location.search);
@@ -52,7 +62,7 @@ const app={
   data:null,peer:null,status:'idle',peers:0,tab:'lyrics',editingSet:false,editSetId:null,editor:null,
   showInvite:false,showReadingOptions:false,showProjectorTools:false,showChords:true,font:1,projectorFont:2,follow:true,
   scrollTop:0,programScroll:false,modal:'',message:'',pendingCode:(params.get('join')||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6),
-  pendingView:params.get('view')||'',connectLock:false
+  pendingView:params.get('view')||'',connectLock:false,generation:0
 };
 let toastTimer;
 function toast(message){app.message=message;renderToast();clearTimeout(toastTimer);toastTimer=setTimeout(()=>{app.message='';renderToast();},4000);}
@@ -77,12 +87,20 @@ async function dispatch(action){
 async function startSession({host,code,password,role,name=''}){
   if(app.connectLock)return;
   app.connectLock=true;
+  const generation=++app.generation;
   app.isHost=host;app.code=code;app.password=password;app.role=role;
   app.authorized=host;app.screen='session';app.status='connecting';app.tab='lyrics';
   app.data=host?loadSaved():null;
   if(host){app.data.blank=true;app.data.liveSong=structuredClone(activeSong(app.data));}
   if(host)app.data.sessionName=String(name||app.data.sessionName||'Worship Session').trim().slice(0,80);
   app.showInvite=host;render();
+  if(host){
+    try{
+      const updated=await loadRepositorySongs(app.data);
+      if(app.generation!==generation)return;
+      app.data=updated;app.data.liveSong=structuredClone(activeSong(app.data));persist();render();
+    }catch(error){if(app.generation!==generation)return;toast('GitHub songs unavailable. Using saved library. '+(error.message||''));}
+  }
   const peer=new LyricsPeer({code,isHost:host,password:host?password:role==='control'?password:'',
     onStatus:(value,detail)=>{app.status=value;if(detail)toast(detail);renderStatus();},
     onState:snap=>{const prior=app.data?.cursor;app.data=snap;render();if(!prior||JSON.stringify(prior)!==JSON.stringify(snap.cursor))followLive();},
@@ -94,9 +112,10 @@ async function startSession({host,code,password,role,name=''}){
   app.peer=peer;
   try {await peer.start();}
   catch(error){app.status='error';toast(error.message||'Could not connect.');if(!host)app.modal='connect-failed';render();}
-  finally{app.connectLock=false;}
+  finally{if(app.generation===generation)app.connectLock=false;}
 }
 async function leave(){
+  app.generation++;app.connectLock=false;
   const peer=app.peer;app.peer=null;app.screen='welcome';app.status='idle';app.isHost=false;app.data=null;app.authorized=false;app.showInvite=false;app.modal='';app.editingSet=false;
   render();await peer?.close();
 }
@@ -142,9 +161,9 @@ function lyricsView(){
   const s=currentSong(), cursor=app.data?.cursor, control=app.role==='control'&&canControl();
   if(!s)return `<div class="empty-lyrics">${icon('music',36)}<h2>This set is empty</h2><p>Open Setlist to add your first song.</p></div>`;
   return `<div class="reading-toolbar"><button class="quiet-btn" data-action="reading-options" aria-expanded="${app.showReadingOptions}">${icon('settings',16)} Display</button></div><div class="reading-options" ${app.showReadingOptions?'':'hidden'}><label class="toggle-label"><input type="checkbox" id="chords-toggle" ${app.showChords?'checked':''}><span>Show chords</span></label><div class="font-controls"><button class="small-icon" data-action="font-less" aria-label="Smaller lyrics" ${app.font===0?'disabled':''}>${icon('minus',16)}</button><span>Aa</span><button class="small-icon" data-action="font-more" aria-label="Larger lyrics" ${app.font===2?'disabled':''}>${icon('plus',16)}</button></div></div>
-  ${activeSection(app.data)?.notes?.length?`<aside class="current-notes" aria-label="Current stage notes"><strong>${escape(activeSection(app.data).name)}</strong>${activeSection(app.data).notes.map(n=>`<div class="stage-note">${escape(n)}</div>`).join('')}</aside>`:''}
+
   <div class="lyrics-scroll font-${app.font}" id="lyrics-scroll">${s.sections.map((section,si)=>`<div class="section-card ${si===cursor.section?'current':''}"><button class="section-heading ${control?'actionable':''}" ${control?`data-action="jump" data-song="${cursor.song}" data-section="${si}" data-page="0"`:''}><span>${escape(section.name)}</span>${si===cursor.section?'<small>CURRENT SECTION</small>':''}${control?icon('right',16):''}</button>
-  ${si!==cursor.section&&(section.notes||[]).length?`<div class="stage-notes" aria-label="Stage notes">${section.notes.map(note=>`<div class="stage-note"><span>NOTE</span> ${escape(note)}</div>`).join('')}</div>`:''}
+  ${(section.notes||[]).length?`<div class="stage-notes" aria-label="Stage notes">${section.notes.map(note=>`<div class="stage-note"><span>NOTE</span> ${escape(note)}</div>`).join('')}</div>`:''}
   ${section.pages.map((page,pi)=>{const isLive=si===cursor.section&&pi===cursor.page;return `<${control?'button':'div'} class="lyric-slide ${isLive?'on-air':''} ${control?'actionable':''}" ${control?`data-action="jump" data-song="${cursor.song}" data-section="${si}" data-page="${pi}"`:''} ${isLive?'data-current-slide="true"':''}><div class="slide-lines">${page.map(line=>lineMarkup(line)).join('')}</div>${isLive?`<span class="onair-text">${icon('monitor',14)} ON PROJECTOR</span>`:''}</${control?'button':'div'}>`;}).join('')}</div>`).join('')}</div><button class="return-to-live" id="return-to-live" data-action="return-live" ${app.follow?'hidden':''}>${icon('monitor',15)} Return to live</button>`;
 }
 function setlistView(){
@@ -196,7 +215,7 @@ function modal(){if(app.showInvite && (app.screen==='session'||app.screen==='dem
   if(app.modal==='connect-failed')return wrap(`${close}<span class="modal-symbol">${icon('wifi',24)}</span><h2>Connection unavailable</h2><p>The signaling connection couldn't start. Check your internet connection and make sure the VDO.Ninja SDK isn't blocked.</p><button class="btn primary wide" data-action="leave">Return home</button>`);
   if(app.modal==='create-set')return wrap(`${close}<h2>Create a set</h2><p>Organize songs for another service or rehearsal.</p><form id="create-set-form"><label>SET NAME</label><input name="name" maxlength="80" placeholder="Friday Night Worship" required><button type="submit" class="btn primary wide large">Create set</button></form>`);
   if(app.modal==='rename-set')return wrap(`${close}<h2>Rename set</h2><form id="rename-set-form"><label>SET NAME</label><input name="name" maxlength="80" value="${escape(setName())}" required><button type="submit" class="btn primary wide large">Save name</button></form>`);
-  if(app.modal==='library')return wrap(`<div class="modal-wide">${close}<div class="overline">SONG LIBRARY</div><h2>Your songs</h2><p>Add a song to the current set, or create something new.</p><div class="library-list">${app.data.library.map(song=>`<div class="library-entry"><div><strong>${escape(song.title)}</strong><small>Key ${escape(song.key||'—')} · ${song.sections.length} sections</small></div><div class="mini-actions"><button data-action="edit-song" data-id="${escape(song.id)}" title="Edit song">${icon('edit',17)}</button><button data-action="add-song" data-id="${escape(song.id)}" title="Add to set">${icon('plus',20)}</button></div></div>`).join('')}</div><button class="btn primary wide large" data-action="new-song">${icon('plus',17)} Create new song</button></div>`);
+  if(app.modal==='library')return wrap(`<div class="modal-wide">${close}<div class="overline">SONG LIBRARY</div><h2>Your songs</h2><p>Add songs to the set or create a song.</p><p class="help"><a class="github-library-link" href="https://github.com/dannotjack/sync/edit/main/songs/library.json" target="_blank" rel="noopener noreferrer">Edit shared library on GitHub ${icon('external',13)}</a> · Loads when a host session starts. App edits stay with the host.</p><div class="library-list">${app.data.library.map(song=>`<div class="library-entry"><div><strong>${escape(song.title)}</strong><small>Key ${escape(song.key||'—')} · ${song.sections.length} sections</small></div><div class="mini-actions"><button data-action="edit-song" data-id="${escape(song.id)}" title="Edit song">${icon('edit',17)}</button><button data-action="add-song" data-id="${escape(song.id)}" title="Add to set">${icon('plus',20)}</button></div></div>`).join('')}</div><button class="btn primary wide large" data-action="new-song">${icon('plus',17)} Create new song</button></div>`);
   if(app.modal==='song-editor'){
     const song=app.editor||{id:'',title:'',key:'',bpm:0,order:'',source:''};
     return wrap(`<div class="modal-wide song-editor-modal">${close}<div class="overline">SONG EDITOR</div><h2>${song.id?'Edit song':'New song'}</h2><form id="song-editor-form"><input type="hidden" name="id" value="${escape(song.id||'')}"><div class="editor-fields"><label>Song title<input name="title" maxlength="100" required value="${escape(song.title)}"></label><label>Key<input name="key" maxlength="16" value="${escape(song.key)}" placeholder="G"></label><label>BPM<input name="bpm" type="number" min="0" max="300" value="${Number(song.bpm)||''}" placeholder="Optional"></label></div><label>SECTION ORDER<input name="order" maxlength="2000" value="${escape(song.order||'')}" placeholder="Verse 1, Chorus, Verse 2, Chorus, Bridge, Chorus" aria-describedby="order-preview"></label><div id="order-preview" class="order-preview" aria-live="polite"></div><p class="help">Optional. Use headings, V1 / C / B, or section numbers separated by commas. Leave empty to follow the lyrics below.</p><label>LYRICS + CHORDS</label><textarea name="source" spellcheck="false" rows="13" placeholder="${escape(SONG_SYNTAX_EXAMPLE)}" required>${escape(song.source)}</textarea><p class="help">[Verse 1] starts a section. --- starts another slide in that section. The next heading starts a new section. Blank lines are spacing only.</p><details class="syntax-guide"><summary>How to write lyrics</summary><p class="help">Four things: [Section], --- for slides, [G] for chords, # for stage notes. No closing tags needed.</p>${syntaxExamples()}<details><summary>Full song example</summary><pre>${escape(SONG_SYNTAX_EXAMPLE)}</pre></details></details><div class="editor-actions"><button class="btn outline" type="button" data-action="close-modal">Cancel</button><button class="btn primary" type="submit">Save song ${icon('check',17)}</button></div></form></div>`);

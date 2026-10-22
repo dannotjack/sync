@@ -1,4 +1,4 @@
-# Sync Lyrics · v1.0 Beta 7
+# Sync Lyrics · v1.0 Beta 8
 
 Peer-to-peer lyrics syncing for Projector, Stage and Control. Static HTML, CSS and JavaScript hosted on GitHub Pages at https://lyrics.notjack.au.
 
@@ -44,7 +44,7 @@ Only four formatting rules are needed:
 
 Verse 1 has two slides. Verse 2 and Chorus each have one. Blank lines add spacing in the editor; they do not split slides. There is no automatic line-count split and no closing section tag. Add --- wherever you want another slide. Keep each slide short enough to read on your display.
 
-A section containing only a # note works as an instrumental cue and projects black. Notes remain visible above the scrolling lyrics for the current section. Enter title, key and BPM in their fields above the lyrics. The editor includes examples beside the actual Stage and Projector output.
+A section containing only a # note works as an instrumental cue and projects black. Notes stay inside their section blocks and scroll with the lyrics. Enter title, key and BPM in their fields above the lyrics. The editor includes examples beside the actual Stage and Projector output.
 
 ### Section order
 
@@ -68,7 +68,7 @@ The host is required for live updates. Devices retain received lyrics during an 
 
 VDO.Ninja SDK 1.6.2 supplies encrypted WebRTC data channels; external signaling and sometimes TURN relay services are needed. This is a trusted-team beta: host discovery is not cryptographically authenticated, so do not use it for confidential data. Older song formats remain readable for compatibility, but only the four rules above are taught in the editor.
 
-Refresh all devices after an update. Beta 7 uses protocol lyrics-live/3. Older clients should not join the session.
+Refresh all devices after an update. Beta 8 uses protocol lyrics-live/3. Older clients should not join the session.
 
 ## Deploy and test
 
@@ -80,5 +80,38 @@ Uses the VDO.Ninja SDK (MPL-2.0); this application is not affiliated with VDO.Ni
 
 The homepage uses the supplied original photograph without altering it. The title is positioned relative to the photograph’s yellow frame; session controls sit below it. Short windows scroll to preserve usable controls.
 
-## Thanks to the OG
-❤️ Inspired by Ben Yap's project at syncmylyrics.benyap.com ❤️
+## Edit the shared song library on GitHub
+
+Open https://github.com/dannotjack/sync/edit/main/songs/library.json. Copy a song object, give it a unique stable id, and edit title, key, bpm, optional order and lyrics. Each lyrics-array entry is one line of song text. Commit the file and wait for GitHub Pages to finish deploying. Start a new host session to load the shared songs; they appear in Song library and can be added to any set. Existing live sessions are not changed.
+
+New shared songs are added automatically. Later GitHub changes update an unchanged local copy. If a song was edited in the app, the host's version is kept. Removing a song from the file does not erase saved browser copies. The app does not write to GitHub; its Save button saves to the host browser. The source file is in a public repository, so its contents are public.
+
+Use the example below. Add a comma between song objects. Use a stable id: changing it creates another song. Lyrics use only the normal four rules: [Section], --- slides, [G] chords and # stage notes.
+
+```json
+{
+  "version": 1,
+  "songs": [
+    {
+      "id": "my-song",
+      "title": "My Song",
+      "key": "G",
+      "bpm": 76,
+      "order": "V1, C, V1, C",
+      "lyrics": [
+        "[Verse 1]",
+        "# Guitar only",
+        "[G]First line",
+        "[D]Second line",
+        "---",
+        "[C]Next slide, still Verse 1",
+        "[Chorus]",
+        "# All voices in",
+        "[G]Chorus words"
+      ]
+    }
+  ]
+}
+```
+
+If the shared file cannot load or contains errors, the host opens using its saved library and shows a message. Preview/demo continues to use the existing local sample data.

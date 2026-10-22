@@ -228,7 +228,9 @@ export function validateImport(parsed) {
   const ids=new Set(lib.map(x=>x.id));
   const sets=parsed.sets.map(x=>({id:clean(x.id,120)||uid(),name:clean(x.name,80)||'Set',songs:(Array.isArray(x.songs)?x.songs:[]).filter(id=>ids.has(id)).slice(0,120)}));
   if(!sets.length) sets.push({id:uid(),name:'New Set',songs:[]});
-  return {rev:1,sessionName:clean(parsed.sessionName,80)||sets[0].name,library:lib,sets,activeSetId:sets[0].id,cursor:{song:0,section:0,page:0},blank:true};
+  const repositoryVersions={};
+  for(const song of lib){const value=parsed.repositoryVersions?.[song.id];if(typeof value==='string'&&/^[a-f0-9]{64}$/.test(value))repositoryVersions[song.id]=value;}
+  return {repositoryVersions,rev:1,sessionName:clean(parsed.sessionName,80)||sets[0].name,library:lib,sets,activeSetId:sets[0].id,cursor:{song:0,section:0,page:0},blank:true};
 }
 
 export function chordSegments(input) {
@@ -265,3 +267,32 @@ export const SONG_SYNTAX_EXAMPLE = `[Verse 1]
 
 [Outro]
 # Guitar only, four bars.`;
+
+// Shared files are read-only from the site. GitHub credentials never enter this app.
+export async function mergeRepositorySongs(state,manifest){
+  if(!manifest||manifest.version!==1||!Array.isArray(manifest.songs)||manifest.songs.length>300)throw new Error('Use version 1 and a songs array in songs/library.json.');
+  const seen=new Set();
+  const songs=manifest.songs.map((entry,index)=>{
+    if(!entry||typeof entry.id!=='string'||!entry.id.trim()||entry.id.length>120)throw new Error('GitHub song '+(index+1)+' needs a stable id.');
+    if(seen.has(entry.id.trim()))throw new Error('Duplicate GitHub song id: '+entry.id.trim());seen.add(entry.id.trim());
+    if(!Array.isArray(entry.lyrics)||!entry.lyrics.every(line=>typeof line==='string'))throw new Error('GitHub song '+entry.id+' needs a lyrics array of text lines.');
+    return validSong({...entry,source:entry.lyrics.join('\n')});
+  });
+  if(!globalThis.crypto?.subtle)throw new Error('Open the site over HTTPS to load GitHub songs.');
+  const signature=song=>JSON.stringify([song.title,song.key,song.bpm,song.order||'',song.source]);
+  const fingerprint=async song=>{const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(signature(song)));return Array.from(new Uint8Array(digest),v=>v.toString(16).padStart(2,'0')).join('');};
+  const next=structuredClone(state);next.repositoryVersions={...(state.repositoryVersions||{})};
+  const hashes=await Promise.all(songs.map(fingerprint));
+  for(let i=0;i<songs.length;i++){
+    const incoming=songs[i],index=next.library.findIndex(song=>song.id===incoming.id);
+    if(index<0){if(next.library.length>=300)throw new Error('Song library is full (300 songs).');next.library.push(incoming);}
+    else{
+      const existing=next.library[index],previous=next.repositoryVersions[incoming.id];
+      // A local edit is kept. An unchanged shared copy can safely receive GitHub updates.
+      if(previous&&await fingerprint(existing)===previous)next.library[index]=incoming;
+    }
+    next.repositoryVersions[incoming.id]=hashes[i];
+  }
+  next.rev=(Number(next.rev)||0)+1;
+  return next;
+}

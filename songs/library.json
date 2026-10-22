@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "songs": [
+    {
+      "id": "morning",
+      "title": "Morning Light",
+      "key": "G",
+      "bpm": 76,
+      "order": "",
+      "lyrics": [
+        "[Verse 1]",
+        "[G]When the morning [D]finds us here",
+        "[Em]Hope is rising, [C]clear and near",
+        "---",
+        "[G]Every moment, [D]every breath",
+        "[C]Held in kindness, [G]held in grace",
+        "",
+        "[Chorus]",
+        "# Build gently; all voices in.",
+        "[C]Lead us on into the [G]light",
+        "[D]Hold us through the [Em]darkest night",
+        "---",
+        "[C]Every voice and every [G]song",
+        "[D]Sing of hope that [G]carries on",
+        "",
+        "[Bridge]",
+        "[Em]We will not be [C]overcome",
+        "[G]There's a new day [D]yet to come"
+      ]
+    },
+    {
+      "id": "waters",
+      "title": "Still Waters",
+      "key": "D",
+      "bpm": 68,
+      "order": "",
+      "lyrics": [
+        "[Verse 1]",
+        "[D]By the quiet [A]waters stay",
+        "[Bm]Guide my restless [G]heart today",
+        "---",
+        "[D]When the road is [A]hard to see",
+        "[G]Walk the winding [D]path with me",
+        "",
+        "[Chorus]",
+        "[G]Peace like a river, [D]steady and deep",
+        "[A]Love that will hold me, [Bm]love that will keep"
+      ]
+    },
+    {
+      "id": "new",
+      "title": "All Things New",
+      "key": "C",
+      "bpm": 80,
+      "order": "",
+      "lyrics": [
+        "[Verse 1]",
+        "[C]Here at the [G]turning of the tide",
+        "[Am]Hope is [F]awakening inside",
+        "",
+        "[Chorus]",
+        "[F]You make [C]all things new",
+        "[G]The morning [Am]breaks through"
+      ]
+    }
+  ]
+}
