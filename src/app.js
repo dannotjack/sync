@@ -64,7 +64,7 @@ async function loadRepositorySongs(state){
         const text=await original.text();
         if(text.length>100000)throw new Error('Song source is too large.');
         const converted=convertOnSong(text,entry.originPath);
-        return {...entry,title:converted.title,key:converted.key,bpm:converted.bpm,lyrics:converted.source.split('\n')};
+        return {...entry,title:entry.title||converted.title,key:converted.key,bpm:converted.bpm,lyrics:converted.source.split('\n')};
       }));
     }
     return await mergeRepositorySongs(state,manifest);
