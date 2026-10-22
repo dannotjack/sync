@@ -1,4 +1,4 @@
-import {parseSongText,arrangeSections,validSong,chordSegments,validateImport} from '../src/model.js?v=beta8';
+import {parseSongText,arrangeSections,validSong,chordSegments,validateImport} from '../src/model.js?v=beta9';
 import {setupOnSongBrowser} from './source-import.js';
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
