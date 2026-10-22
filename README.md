@@ -135,3 +135,9 @@ In **Studio → Master Library → Browse OnSong collection**, browse the metada
 The app does **not** embed or publish the upstream lyrics in its repository. The source contains modern worship songs and does not provide an explicit redistribution licence. Ensure you have permission for your intended copying, display, or publication. The importer is for creating a local working library; publishing exported lyrics to a public repository is a separate rights decision.
 
 The Studio library accommodates up to 1000 entries. A very large master library may produce a large host snapshot; for reliable live projection, importing only the songs needed for a set remains preferable. Keep browser backups when importing hundreds of songs.
+
+### Linked master-library song catalogue (Studio)
+
+The Master Library view automatically includes all **677 source song titles** from the pinned Matt Graham OnSong catalogue alongside the library's existing songs. The public repository contains only the filenames and source references for this collection. Searching and choosing a linked title downloads just that song into the current browser for editing and preview; adding one to a local set creates an independent local copy. Local edits are preserved on the device.
+
+Exporting `library.json` includes only locally created, edited or individually downloaded songs, **not** linked-only source entries. Neither the upstream lyrics nor a full copy of the collection is committed to the public site. This allows people to discover a large catalogue while remaining mindful of copyright and copying permissions. The existing **Bulk import OnSong** option remains available for local bulk loading.
