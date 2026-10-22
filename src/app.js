@@ -107,7 +107,7 @@ function jumpLocal(role){
 }
 function renderStatus(){const el=$('#connection-slot');if(el)el.innerHTML=indicator();const c=$('#peer-count');if(c)c.textContent=`${app.peers} connected`;}
 function wordmark(){return `<span class="brand-name">Sync Lyrics</span>`;}
-function welcome(){return `<div class="photo-home"><img class="home-photo" src="./assets/home-room.jpg" width="1376" height="768" alt="" fetchpriority="high"><header class="photo-title"><h1>Sync Lyrics</h1></header><main class="photo-controls"><p class="photo-tagline">Peer-to-peer lyrics syncing.</p>
+function welcome(){return `<div class="photo-home"><img class="home-photo" src="./assets/home-room.jpg" width="1376" height="768" alt="" fetchpriority="high"><header class="photo-title"><h1>Sync Lyrics</h1><p class="photo-credit">not jack.</p></header><main class="photo-controls"><p class="photo-tagline">Peer-to-peer lyrics syncing.</p>
 <button class="btn primary wide large" data-action="show-create">Create session ${icon('plus',18)}</button>
 <div class="home-divider">or join</div><form id="join-form"><label for="join-code">SESSION CODE</label><div class="join-inline"><input id="join-code" name="code" class="code-input" placeholder="A7K92B" maxlength="6" autocomplete="off" autocapitalize="characters" value="${escape(app.pendingCode)}" required><button class="btn outline" type="submit">Join ${icon('right',17)}</button></div></form>
 <button class="demo-link" data-action="preview">Try demo ${icon('right',15)}</button></main></div>`;}
