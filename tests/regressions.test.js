@@ -1,10 +1,11 @@
+import {multiSongFixture} from './fixtures.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {LyricsPeer} from '../src/sync.js';
 import {sampleState,applyAction,activeSong} from '../src/model.js';
 const proto='lyrics-live/3';
 test('removing earlier song preserves live song and slide',()=>{
- let s=sampleState();s.cursor={song:1,section:0,page:1};s=applyAction(s,{kind:'remove-from-set',index:0});assert.equal(activeSong(s).id,'waters');assert.deepEqual(s.cursor,{song:0,section:0,page:1});assert.throws(()=>applyAction(s,{kind:'delete-song',id:'waters'}),/live song/);
+ let s=multiSongFixture();s.cursor={song:1,section:0,page:1};s=applyAction(s,{kind:'remove-from-set',index:0});assert.equal(activeSong(s).id,'waters');assert.deepEqual(s.cursor,{song:0,section:0,page:1});assert.throws(()=>applyAction(s,{kind:'delete-song',id:'waters'}),/live song/);
 });
 test('reconnect authenticates again and accepts replacement host',async()=>{
  const handlers={},sent=[];globalThis.window={VDONinjaSDK:class{addEventListener(n,f){handlers[n]=f}sendData(m,u){sent.push(m);return true}async autoConnect(){}async disconnect(){}}};
