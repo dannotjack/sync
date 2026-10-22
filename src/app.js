@@ -98,7 +98,7 @@ async function startSession({host,code,password,role,name=''}){
     try{
       const updated=await loadRepositorySongs(app.data);
       if(app.generation!==generation)return;
-      app.data=updated;app.data.liveSong=structuredClone(activeSong(app.data));persist();render();
+      app.data=updated;app.data.liveSong=null;app.data.liveSong=structuredClone(activeSong(app.data));persist();render();
     }catch(error){if(app.generation!==generation)return;toast('GitHub songs unavailable. Using saved library. '+(error.message||''));}
   }
   const peer=new LyricsPeer({code,isHost:host,password:host?password:role==='control'?password:'',
