@@ -89,7 +89,7 @@ export class LyricsPeer {
     if(message.kind==='command-error') this.onStatus?.('error',message.message);
     if(message.kind==='snapshot-part') {
       const {id,n,total,chunk,rev}=message;
-      if(typeof id!=='string'||typeof chunk!=='string'||!Number.isInteger(n)||!Number.isInteger(total)||total<1||total>350||n<0||n>=total)return;
+      if(typeof id!=='string'||typeof chunk!=='string'||!Number.isInteger(n)||!Number.isInteger(total)||total<1||total>1000||n<0||n>=total)return;
       let t=this.transfers.get(id);
       if(!t){t={chunks:new Array(total),received:0,total,rev,created:Date.now()};this.transfers.set(id,t);}
       if(t.total!==total)return;
@@ -113,7 +113,7 @@ export class LyricsPeer {
     const snapshot=this.getSnapshot();
     const json=JSON.stringify(snapshot);
     const parts=json.match(/[\s\S]{1,5000}/g)||[''];
-    if(parts.length>350){this.report('error','Library is too large for this session; shorten it or remove unused songs.');return;}
+    if(parts.length>1000){this.report('error','Library is too large for this session; shorten it or remove unused songs.');return;}
     const id=(crypto.randomUUID?.()||String(Math.random()))+'_'+snapshot.rev;
     for(let i=0;i<parts.length;i++) {
       if(this.closed)return;
