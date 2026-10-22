@@ -79,3 +79,5 @@ Run `npm test` for model and transport tests. No npm install is required. For lo
 Uses the VDO.Ninja SDK (MPL-2.0); this application is not affiliated with VDO.Ninja. Use lyrics you have permission to display.
 
 The homepage uses the supplied original photograph without altering it. The title is positioned relative to the photograph’s yellow frame; session controls sit below it. Short windows scroll to preserve usable controls.
+
+Inspired by Ben Yap's project at syncmylyrics.benyap.com
