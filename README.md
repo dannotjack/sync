@@ -1,6 +1,6 @@
-# Sync Lyrics · v1.0 Beta 6
+# Sync Lyrics · v1.0 Beta 7
 
-Peer-to-peer lyrics syncing for Projector, Stage and Control. Static HTML, CSS and JavaScript hosted on GitHub Pages at https://sync.notjack.au.
+Peer-to-peer lyrics syncing for Projector, Stage and Control. Static HTML, CSS and JavaScript hosted on GitHub Pages at https://lyrics.notjack.au.
 
 ## Start and join
 
@@ -68,12 +68,14 @@ The host is required for live updates. Devices retain received lyrics during an 
 
 VDO.Ninja SDK 1.6.2 supplies encrypted WebRTC data channels; external signaling and sometimes TURN relay services are needed. This is a trusted-team beta: host discovery is not cryptographically authenticated, so do not use it for confidential data. Older song formats remain readable for compatibility, but only the four rules above are taught in the editor.
 
-Refresh all devices after an update. Beta 6 uses protocol lyrics-live/3. Older clients should not join the session.
+Refresh all devices after an update. Beta 7 uses protocol lyrics-live/3. Older clients should not join the session.
 
 ## Deploy and test
 
-Upload this repository to GitHub Pages using main / (root). CNAME is sync.notjack.au. DNS CNAME sync points to dannotjack.github.io. Enable HTTPS when available.
+Upload this repository to GitHub Pages using main / (root). CNAME is lyrics.notjack.au. DNS CNAME lyrics points to dannotjack.github.io. Enable HTTPS when available.
 
 Run `npm test` for model and transport tests. No npm install is required. For local demo use `python3 -m http.server 8000` and open `http://localhost:8000/?demo=1`.
 
 Uses the VDO.Ninja SDK (MPL-2.0); this application is not affiliated with VDO.Ninja. Use lyrics you have permission to display.
+
+The homepage uses the supplied original photograph without altering it. The title is positioned relative to the photograph’s yellow frame; session controls sit below it. Short windows scroll to preserve usable controls.

@@ -1,5 +1,5 @@
-import { STORAGE_KEY, sampleState, validateImport, validSong, songToText, applyAction, activeSet, activeSong, activeSection, atStart, atEnd, chordSegments, SONG_SYNTAX_EXAMPLE, parseSongText, arrangeSections } from './model.js?v=beta6';
-import { LyricsPeer } from './sync.js?v=beta6';
+import { STORAGE_KEY, sampleState, validateImport, validSong, songToText, applyAction, activeSet, activeSong, activeSection, atStart, atEnd, chordSegments, SONG_SYNTAX_EXAMPLE, parseSongText, arrangeSections } from './model.js?v=beta7';
+import { LyricsPeer } from './sync.js?v=beta7';
 const $ = (query, root=document) => root.querySelector(query);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icon = (name, size=20) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${({
@@ -107,8 +107,7 @@ function jumpLocal(role){
 }
 function renderStatus(){const el=$('#connection-slot');if(el)el.innerHTML=indicator();const c=$('#peer-count');if(c)c.textContent=`${app.peers} connected`;}
 function wordmark(){return `<span class="brand-name">Sync Lyrics</span>`;}
-function welcome(){return `<div class="welcome-shell"><header class="welcome-top"><span class="beta-label">v1.0 Beta</span></header><main class="welcome-main minimal-home">
-<h1>Sync Lyrics</h1><p class="intro">Peer-to-peer lyrics syncing.</p>
+function welcome(){return `<div class="photo-home"><img class="home-photo" src="./assets/home-room.jpg" width="1376" height="768" alt="" fetchpriority="high"><header class="photo-title"><h1>Sync Lyrics</h1></header><main class="photo-controls"><p class="photo-tagline">Peer-to-peer lyrics syncing.</p>
 <button class="btn primary wide large" data-action="show-create">Create session ${icon('plus',18)}</button>
 <div class="home-divider">or join</div><form id="join-form"><label for="join-code">SESSION CODE</label><div class="join-inline"><input id="join-code" name="code" class="code-input" placeholder="A7K92B" maxlength="6" autocomplete="off" autocapitalize="characters" value="${escape(app.pendingCode)}" required><button class="btn outline" type="submit">Join ${icon('right',17)}</button></div></form>
 <button class="demo-link" data-action="preview">Try demo ${icon('right',15)}</button></main></div>`;}
