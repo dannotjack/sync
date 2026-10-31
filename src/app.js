@@ -180,7 +180,7 @@ function songTabs(){return `<nav class="song-tabs" aria-label="Control workspace
 
 function lineMarkup(line,showChords=app.showChords){
   const segments=chordSegments(line);
-  return `<div class="lyric-line">${segments.map((s,i)=>`<span class="chord-pair">${showChords?`<span class="chord-name">${escape(s.chord)||'&nbsp;'}</span>`:''}<span class="lyric-words">${escape(s.text)||'&nbsp;'}</span></span>`).join('')}</div>`;
+  return `<div class="lyric-line ${segments.every(s=>!s.text.trim())?'chord-only':''}">${segments.map((s,i)=>`<span class="chord-pair">${showChords?`<span class="chord-name">${escape(s.chord)||'&nbsp;'}</span>`:''}<span class="lyric-words">${escape(s.text)||'&nbsp;'}</span></span>`).join('')}</div>`;
 }
 function lyricsView(){
   const s=currentSong(), cursor=app.data?.cursor, control=app.role==='control'&&canControl();

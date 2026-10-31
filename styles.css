@@ -141,3 +141,11 @@ body,.welcome-shell{background:#080808}.welcome-top{justify-content:flex-end}.br
 .projection-gear{top:auto;bottom:16px;right:16px;border:1px solid #444;background:#222a;opacity:.3;padding:10px}
 .projector-shell:hover .projection-gear,.projection-gear:focus-visible{opacity:1}
 @media(max-width:600px){.app-header{padding:0 14px;gap:8px}.app-header-right{gap:8px}.app-header .connection{font-size:10px;max-width:125px}.session-title{font-size:12px}.song-tabs{padding:7px 12px}.song-header{padding:13px 15px}.song-header h1{font-size:18px}.lyrics-scroll{padding:5px 15px 45px;gap:20px}.setlist-content{padding:14px 12px 25px}.set-toolbar h2{font-size:17px}.control-dock{padding:9px 10px max(12px,env(safe-area-inset-bottom))}.dock-button{min-height:65px;font-size:14px;gap:6px}.dock-caption{margin-bottom:7px}.settings-card{padding:23px 20px;max-height:88dvh}.modal-backdrop:has(.settings-card){align-items:flex-end;padding:10px}.set-row{gap:9px}.set-row-copy strong{font-size:14px}.beta-badge{font-size:9px;padding:3px 5px}}
+
+.lyrics-scroll.font-0 .lyric-words{font-size:18px}
+.lyrics-scroll.font-1 .lyric-words{font-size:22px}
+.lyrics-scroll.font-2 .lyric-words{font-size:28px}
+.lyrics-scroll .chord-name{font-size:13px;line-height:1.4;min-height:19px}
+.lyrics-scroll.font-2 .chord-name{font-size:16px;min-height:23px}
+.lyric-line.chord-only{column-gap:1em}
+@media(max-width:600px){.lyrics-scroll.font-0 .lyric-words{font-size:16px}.lyrics-scroll.font-1 .lyric-words{font-size:20px}.lyrics-scroll.font-2 .lyric-words{font-size:24px}}
