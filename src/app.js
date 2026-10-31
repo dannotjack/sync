@@ -76,7 +76,7 @@ const params=new URLSearchParams(location.search);
 const app={
   screen:'welcome',isHost:false,code:'',password:'',role:'control',authorized:false,
   data:null,peer:null,status:'idle',peers:0,tab:'lyrics',editingSet:false,editSetId:null,editor:null,
-  showInvite:false,showReadingOptions:false,showProjectorTools:false,showChords:true,font:1,projectorFont:2,follow:true,
+  showInvite:false,showChords:true,font:1,projectorFont:2,follow:true,
   scrollTop:0,programScroll:false,modal:'',message:'',pendingCode:(params.get('join')||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6),
   pendingView:params.get('view')||'',connectLock:false,generation:0
 };
@@ -109,7 +109,7 @@ async function startSession({host,code,password,role,name=''}){
   app.data=host?loadSaved():null;
   if(host){app.data.blank=true;app.data.liveSong=structuredClone(activeSong(app.data));}
   if(host)app.data.sessionName=String(name||app.data.sessionName||'Worship Session').trim().slice(0,80);
-  app.showInvite=host;render();
+  app.showInvite=false;app.modal='';render();
   if(host){
     try{
       const updated=await loadRepositorySongs(app.data);
@@ -147,11 +147,12 @@ async function preview(){
 }
 function jumpLocal(role){
   if(role==='control'&&!canControl()){app.modal='auth';render();return;}
-  app.role=role;app.tab='lyrics';app.follow=true;app.scrollTop=0;render();followLive();
+  app.role=role;app.tab='lyrics';app.modal='';app.showInvite=false;app.follow=true;app.scrollTop=0;render();followLive();
 }
 function renderStatus(){const el=$('#connection-slot');if(el)el.innerHTML=indicator();const c=$('#peer-count');if(c)c.textContent=`${app.peers} connected`;}
-function wordmark(){return `<span class="brand-name">Sync Lyrics</span>`;}
-function welcome(){return `<div class="photo-home"><img class="home-photo" src="./assets/home-room.jpg" width="1376" height="768" alt="" fetchpriority="high"><header class="photo-title"><h1>Sync Lyrics</h1><p class="photo-credit">not jack.</p></header><main class="photo-controls"><p class="photo-tagline">Peer-to-peer lyrics syncing.</p>
+function betaBadge(){return '<span class="beta-badge">Beta</span>';}
+function wordmark(){return `<span class="brand-name">Sync Lyrics</span>${betaBadge()}`;}
+function welcome(){return `<div class="photo-home"><img class="home-photo" src="./assets/home-room.jpg" width="1376" height="768" alt="" fetchpriority="high"><header class="photo-title"><h1>Sync Lyrics</h1><p class="photo-credit">not jack.</p></header><main class="photo-controls"><p class="photo-tagline">${betaBadge()} Peer-to-peer lyrics syncing.</p>
 <button class="btn primary wide large" data-action="show-create">Create session ${icon('plus',18)}</button>
 <div class="home-divider">or join</div><form id="join-form"><label for="join-code">SESSION CODE</label><div class="join-inline"><input id="join-code" name="code" class="code-input" placeholder="A7K92B" maxlength="6" autocomplete="off" autocapitalize="characters" value="${escape(app.pendingCode)}" required><button class="btn outline" type="submit">Join ${icon('right',17)}</button></div></form>
 <button class="demo-link" data-action="preview">Try demo ${icon('right',15)}</button></main></div>`;}
@@ -163,21 +164,20 @@ function createView(){return `<div class="welcome-shell"><header class="welcome-
   <button type="submit" class="btn primary wide large">Start session ${icon('right',18)}</button></form></main></div>`;}
 function joinView(){return `<div class="welcome-shell"><header class="welcome-top"><div class="brand">${wordmark()}</div><button class="quiet-btn" data-action="home">${icon('left',16)} Back</button></header><main class="form-shell"><h1 class="form-title">Join session</h1><form id="join-role-form" class="form-card">
    <label for="role-code">SESSION CODE</label><input id="role-code" class="code-input" name="code" value="${escape(app.pendingCode)}" maxlength="6" required autocapitalize="characters" autocomplete="off">
-   <label>YOUR VIEW</label><div class="role-picks">
+   <label>WHAT IS THIS SCREEN FOR?</label><div class="role-picks">
     ${[['projector','monitor','Projector','Lyrics only'],['stage','music','Stage','Lyrics + chords'],['control','controls','Control','Manage the slides']].map(([v,i,n,d])=>`<label class="role-pick"><input type="radio" name="role" value="${v}" ${app.pendingView===v || (!app.pendingView&&v==='stage')?'checked':''}><span class="role-pick-content">${icon(i,23)}<strong>${n}</strong><small>${d}</small></span></label>`).join('')}
    </div><div id="join-password-slot">${app.pendingView==='control'?passwordField():''}</div>
    <button type="submit" class="btn primary wide large">Connect to session ${icon('right',18)}</button>
    </form></main></div>`;}
 function passwordField(){return `<label for="join-password">CONTROL PASSWORD</label><input id="join-password" name="password" type="password" autocomplete="off" placeholder="Enter controller password" required minlength="6">`;}
-function topbar(){return `<header class="app-header"><div class="app-header-left"><div class="brand small-brand">${wordmark()}</div><div class="session-chip"><span>SESSION</span><strong>${escape(app.code)}</strong><button title="Copy session link" data-action="copy-link">${icon('link',16)}</button></div></div>
-    <div class="app-header-right"><div id="connection-slot">${indicator()}</div><span class="peer-count" id="peer-count">${app.peers} connected</span>
-    <button class="icon-button" title="Session options" aria-label="Session options" data-action="invite">${icon('more')}</button></div></header>`;}
-function viewNav(){return `<div class="view-nav"><div class="view-segments">${[['projector','monitor','Projector'],['stage','music','Stage'],['control','controls','Control']].map(([v,ic,label])=>`<button class="view-button ${app.role===v?'selected':''}" data-action="view" data-view="${v}">${icon(ic,17)}<span>${label}</span>${v==='control'&&!canControl()?icon('lock',12):''}</button>`).join('')}</div></div>`;}
+function topbar(){return `<header class="app-header"><div class="app-header-left"><span class="session-title">${escape(app.data?.sessionName||'Sync Lyrics')}</span>${betaBadge()}</div><div class="app-header-right"><div id="connection-slot">${indicator()}</div><button class="icon-button settings-trigger" title="Settings" aria-label="Settings" aria-haspopup="dialog" data-action="settings">${icon('settings',20)}</button></div></header>`;}
+
 function bodyHeader(){
-  const s=currentSong();const set=activeSet(app.data);const blank=app.data?.blank;
-  return `<div class="song-header"><div><h1>${escape(s?.title||'No song selected')}</h1><div class="song-meta">${s?`<span>Key <b>${escape(s.key||'—')}</b></span>${s.bpm?`<span>${s.bpm} BPM</span>`:''}<span>Song ${app.data.cursor.song+1} of ${set?.songs.length||0}</span>`:''}</div></div><span class="live-badge ${blank?'is-blank':''}"><span class="status-dot"></span>${blank?'BLANK':'LIVE'}</span></div>`;
+  const s=currentSong();const blank=app.data?.blank;
+  return `<div class="song-header"><div><h1>${escape(s?.title||'No song selected')}</h1><div class="song-meta">${s?`<span>Key <b>${escape(s.key||'—')}</b></span>${s.bpm?`<span>${s.bpm} BPM</span>`:''}`:''}</div></div><span class="live-badge ${blank?'is-blank':''}"><span class="status-dot"></span>${blank?'BLANK':'LIVE'}</span></div>`;
 }
-function songTabs(){return `<div class="song-tabs"><button class="song-tab ${app.tab==='lyrics'?'active':''}" data-action="tab" data-tab="lyrics">${icon('music',17)} Lyrics & chords</button><button class="song-tab ${app.tab==='setlist'?'active':''}" data-action="tab" data-tab="setlist">${icon('list',17)} Setlist</button></div>`;}
+function songTabs(){return `<nav class="song-tabs" aria-label="Control workspace"><button class="song-tab ${app.tab==='setlist'?'active':''}" data-action="tab" data-tab="setlist" aria-pressed="${app.tab==='setlist'}">Setlist</button><button class="song-tab ${app.tab==='lyrics'?'active':''}" data-action="tab" data-tab="lyrics" aria-pressed="${app.tab==='lyrics'}">Live song</button></nav>`;}
+
 function lineMarkup(line,showChords=app.showChords){
   const segments=chordSegments(line);
   return `<div class="lyric-line">${segments.map((s,i)=>`<span class="chord-pair">${showChords?`<span class="chord-name">${escape(s.chord)||'&nbsp;'}</span>`:''}<span class="lyric-words">${escape(s.text)||'&nbsp;'}</span></span>`).join('')}</div>`;
@@ -185,29 +185,28 @@ function lineMarkup(line,showChords=app.showChords){
 function lyricsView(){
   const s=currentSong(), cursor=app.data?.cursor, control=app.role==='control'&&canControl();
   if(!s)return `<div class="empty-lyrics">${icon('music',36)}<h2>This set is empty</h2><p>Open Setlist to add your first song.</p></div>`;
-  return `<div class="reading-toolbar"><button class="quiet-btn" data-action="reading-options" aria-expanded="${app.showReadingOptions}">${icon('settings',16)} Display</button></div><div class="reading-options" ${app.showReadingOptions?'':'hidden'}><label class="toggle-label"><input type="checkbox" id="chords-toggle" ${app.showChords?'checked':''}><span>Show chords</span></label><div class="font-controls"><button class="small-icon" data-action="font-less" aria-label="Smaller lyrics" ${app.font===0?'disabled':''}>${icon('minus',16)}</button><span>Aa</span><button class="small-icon" data-action="font-more" aria-label="Larger lyrics" ${app.font===2?'disabled':''}>${icon('plus',16)}</button></div></div>
-
-  <div class="lyrics-scroll font-${app.font}" id="lyrics-scroll">${s.sections.map((section,si)=>`<div class="section-card ${si===cursor.section?'current':''}"><button class="section-heading ${control?'actionable':''}" ${control?`data-action="jump" data-song="${cursor.song}" data-section="${si}" data-page="0"`:''}><span>${escape(section.name)}</span>${si===cursor.section?'<small>CURRENT SECTION</small>':''}${control?icon('right',16):''}</button>
-  ${(section.notes||[]).length?`<div class="stage-notes" aria-label="Stage notes">${section.notes.map(note=>`<div class="stage-note"><span>NOTE</span> ${escape(note)}</div>`).join('')}</div>`:''}
-  ${section.pages.map((page,pi)=>{const isLive=si===cursor.section&&pi===cursor.page;return `<${control?'button':'div'} class="lyric-slide ${isLive?'on-air':''} ${control?'actionable':''}" ${control?`data-action="jump" data-song="${cursor.song}" data-section="${si}" data-page="${pi}"`:''} ${isLive?'data-current-slide="true"':''}><div class="slide-lines">${page.map(line=>lineMarkup(line)).join('')}</div>${isLive?`<span class="onair-text">${icon('monitor',14)} ON PROJECTOR</span>`:''}</${control?'button':'div'}>`;}).join('')}</div>`).join('')}</div><button class="return-to-live" id="return-to-live" data-action="return-live" ${app.follow?'hidden':''}>${icon('monitor',15)} Return to live</button>`;
+  return `<div class="lyrics-scroll font-${app.font}" id="lyrics-scroll">${s.sections.map((section,si)=>`<div class="section-card ${si===cursor.section?'current':''}"><${control?'button':'h2'} class="section-heading ${control?'actionable':''}" ${control?`data-action="jump" data-song="${cursor.song}" data-section="${si}" data-page="0"`:''}><span>${escape(section.name)}</span></${control?'button':'h2'}>
+  ${(section.notes||[]).length?`<div class="stage-notes" aria-label="Stage notes">${section.notes.map(note=>`<div class="stage-note">${escape(note)}</div>`).join('')}</div>`:''}
+  ${section.pages.map((page,pi)=>{const isLive=si===cursor.section&&pi===cursor.page;return `<${control?'button':'div'} class="lyric-slide ${isLive?'on-air':''} ${control?'actionable':''}" ${control?`data-action="jump" data-song="${cursor.song}" data-section="${si}" data-page="${pi}"`:''} ${isLive?'data-current-slide="true"':''}><div class="slide-lines">${page.map(line=>lineMarkup(line)).join('')}</div></${control?'button':'div'}>`;}).join('')}</div>`).join('')}</div><button class="return-to-live" id="return-to-live" data-action="return-live" ${app.follow?'hidden':''}>${icon('monitor',15)} Return to live</button>`;
 }
 function setlistView(){
   const editing=app.editingSet&&app.role==='control'&&canControl();
   const set=editing?editingSet():activeSet(app.data),current=set.id===app.data.activeSetId?app.data.cursor.song:-1;
   const library=app.data.library;
-  return `<div class="setlist-content"><div class="set-toolbar"><div class="set-title-wrap"><div class="overline">CURRENT SET</div><h2>${escape(set?.name||'Setlist')}</h2></div>${app.role==='control'&&canControl()?`<div class="set-actions">${app.isHost?'<button class="btn outline small" data-action="show-set-import">Import Studio set</button>':''}<button class="btn outline small" data-action="toggle-edit">${icon(editing?'check':'edit',16)} ${editing?'Done':'Edit Setlist'}</button></div>`:''}</div>
-   ${editing?`<div class="editing-tools"><label>Edit set <select id="set-select" data-action="set-select">${app.data.sets.map(st=>`<option value="${escape(st.id)}" ${st.id===set.id?'selected':''}>${escape(st.name)}</option>`).join('')}</select></label><button class="btn primary small" data-action="take-set-live">Go live with this set</button><button data-action="new-set" class="btn outline small">${icon('plus',15)} New set</button><button data-action="rename-set" class="btn outline small">Rename</button><button data-action="open-library" class="btn outline small">${icon('library',15)} Song library</button></div>`:''}
+  return `<div class="setlist-content"><div class="set-toolbar"><div class="set-title-wrap"><div class="overline">CURRENT SET</div><h2>${escape(set?.name||'Setlist')}</h2></div>${app.role==='control'&&canControl()?`<div class="set-actions">${!editing?'<button class="btn outline small" data-action="open-library">Add songs</button>':''}<button class="btn outline small" data-action="toggle-edit">${icon(editing?'check':'edit',16)} ${editing?'Done':'Edit Setlist'}</button></div>`:''}</div>
+   ${editing?`<div class="editing-tools"><label>Edit set <select id="set-select" data-action="set-select">${app.data.sets.map(st=>`<option value="${escape(st.id)}" ${st.id===set.id?'selected':''}>${escape(st.name)}</option>`).join('')}</select></label><button class="btn primary small" data-action="take-set-live">Go live with this set</button><button data-action="new-set" class="btn outline small">${icon('plus',15)} New set</button><button data-action="rename-set" class="btn outline small">Rename</button>${app.isHost?'<button class="btn outline small" data-action="show-set-import">Import Studio set</button>':''}<button data-action="open-library" class="btn outline small">${icon('library',15)} Song library</button></div>`:''}
    <div class="setlist-rows">${(set?.songs||[]).length?set.songs.map((id,i)=>{const song=library.find(x=>x.id===id);if(!song)return '';return `<div class="set-row ${i===current?'active':''}">${editing?`<input class="set-position" type="number" min="1" max="${set.songs.length}" step="1" value="${i+1}" data-position-index="${i}" aria-label="Position for ${escape(song.title)}">`:`<span class="track-number">${String(i+1).padStart(2,'0')}</span>`}<div class="set-row-copy"><strong>${escape(song.title)}</strong><span>${escape(song.key||'—')} ${i===current?'· ON AIR':''}${i===current&&app.data.liveSong&&(song.source!==app.data.liveSong.source||song.order!==app.data.liveSong.order||song.title!==app.data.liveSong.title)?' · SAVED CHANGES':''}</span></div>${editing?`<div class="mini-actions"><button data-action="move" data-index="${i}" data-dir="-1" title="Move up" ${i===0?'disabled':''}>${icon('arrowUp',17)}</button><button data-action="move" data-index="${i}" data-dir="1" title="Move down" ${i===set.songs.length-1?'disabled':''}>${icon('arrowDown',17)}</button><button data-action="remove" data-index="${i}" title="Remove from set">${icon('close',17)}</button></div>`:app.role==='control'&&canControl()?`<button class="btn outline small" data-action="go-song" data-index="${i}">${i===current?'Go live / reload':'Go live'}</button>`:i===current?`<span class="live-mark">${icon('monitor',17)}</span>`:''}</div>`;}).join(''):`<div class="empty-list">No songs yet. Add one from the library.</div>`}</div>
    ${editing?`<button class="add-song-button" data-action="open-library">${icon('plus',18)} Add songs from library</button>`:''}
-   ${app.role==='control'&&canControl()&&!editing?`<p class="setlist-helper">Tap “Go live” to switch songs. Saved edits stay in the library. Go live / reload applies them to the screen.</p>`:''}
+
   </div>`;
 }
 function controlDock(){if(!app.data||app.role!=='control'||!canControl())return '';
   const s=app.data,c=app.data.cursor,part=activeSection(s);
-  return `<div class="control-dock"><div class="dock-caption"><span><b>${escape(part?.name||'No section')}</b>${part?` <span class="caption-sep">·</span> Slide ${c.page+1} / ${part.pages.length}`:''}</span><span class="controller-indicator">${icon('controls',15)} LIVE CONTROL</span></div>
+  return `<div class="control-dock"><div class="dock-caption"><span><b>${escape(part?.name||'No section')}</b>${part?` <span class="caption-sep">·</span> Slide ${c.page+1} / ${part.pages.length}`:''}</span><span class="controller-indicator">${s.blank?'Screen blank':'Live'}</span></div>
    <div class="dock-buttons"><button class="dock-button back" data-action="back" ${atStart(s)?'disabled':''}>${icon('left',26)}<strong>Back</strong></button><button class="dock-button next" data-action="next" ${atEnd(s)?'disabled':''}><strong>Next</strong>${icon('right',26)}</button><button class="dock-button blank ${s.blank?'active':''}" data-action="blank">${icon(s.blank?'show':'blank',25)}<strong>${s.blank?'Go live':'Blank'}</strong></button></div></div>`;
 }
-function stageScreen(){return `${topbar()}<main class="performance-shell">${viewNav()}<div class="performance-panel">${app.data?`${bodyHeader()}${songTabs()}${app.tab==='lyrics'?lyricsView():setlistView()}`:`<div class="waiting-host"><span class="spin"></span><h2>Waiting for the host</h2><p>Keep this page open while the host connects. Your screen will populate automatically.</p></div>`}${controlDock()}</div></main>`;}
+function stageScreen(){const control=app.role==='control';return `${topbar()}<main class="performance-shell ${control?'control-view':'stage-view'}"><div class="performance-panel">${control?songTabs():''}${app.data?`${app.tab==='lyrics'?bodyHeader()+lyricsView():`${!control?'<button class="quiet-btn stage-back" data-action="tab" data-tab="lyrics">← Live song</button>':''}${setlistView()}`}`:`<div class="waiting-host"><span class="spin"></span><h2>Waiting for the host</h2><p>Lyrics will appear when the host connects.</p></div>`}${controlDock()}</div></main>`;}
+
 function checkProjectorFit(){
  const frame=$('.projection-frame'),lines=$('.projected-lines'),warning=$('#projector-overflow');if(!frame||!lines||!warning)return;
  const padding=getComputedStyle(frame),availableHeight=frame.clientHeight-parseFloat(padding.paddingTop)-parseFloat(padding.paddingBottom),availableWidth=frame.clientWidth-parseFloat(padding.paddingLeft)-parseFloat(padding.paddingRight);
@@ -216,9 +215,13 @@ function checkProjectorFit(){
 window.addEventListener('resize',checkProjectorFit);
 function projectedText(){const sec=activeSection(app.data),c=app.data?.cursor;return sec?.pages[c.page]?.map(s=>chordSegments(s).map(x=>x.text).join(''))||[];}
 function projectorScreen(){return `<div class="projector-shell" id="projector-shell"><div class="projection-frame ${app.data?.blank?'is-black':''} projection-font-${app.projectorFont}">
-  ${app.data&&!app.data.blank?`<div class="projected-lines">${projectedText().map(t=>`<div>${escape(t)}</div>`).join('')||(activeSection(app.data)?'':'<div class="projector-placeholder">Waiting for lyrics</div>')}</div>`:!app.data?'<div class="projected-lines projector-placeholder">Waiting for host…</div>':''}
-  </div><div class="projector-tools ${app.showProjectorTools?'open':''}"><div class="projector-tools-head"><span>${escape(currentSong()?.title||'Sync Lyrics')} ${activeSection(app.data)?'· '+escape(activeSection(app.data).name):''}</span>${indicator()}</div><p id="projector-overflow" class="projector-overflow" hidden>Lyrics exceed this screen. Reduce text size or add a --- slide break in the editor.</p><div class="projector-tool-row"><button class="btn outline small" data-action="projector-font-less" ${app.projectorFont===0?'disabled':''}>${icon('minus',17)} A</button><button class="btn outline small" data-action="projector-font-more" ${app.projectorFont===4?'disabled':''}>${icon('plus',17)} A</button><button class="btn outline small" data-action="fullscreen">${icon('fullscreen',16)} Fullscreen</button><button class="btn outline small" data-action="projection-options">${icon('settings',17)} ${app.showProjectorTools?'Hide':'Options'}</button><button class="btn outline small" data-action="projector-return">${icon('left',17)} Leave view</button></div></div>
- <button class="projection-gear" data-action="projection-options" title="Projector settings" aria-label="Projector settings">${icon('settings',23)}</button></div>`;}
+ ${app.data&&!app.data.blank?`<div class="projected-lines">${projectedText().map(t=>`<div>${escape(t)}</div>`).join('')||(activeSection(app.data)?'':'<div class="projector-placeholder">Waiting for lyrics</div>')}</div>`:!app.data?'<div class="projected-lines projector-placeholder">Waiting for host…</div>':''}
+ </div><button class="projection-gear" data-action="settings" aria-label="Settings" title="Settings" aria-haspopup="dialog">${icon('settings',23)}</button></div>`;}
+function settingsContent(){const projector=app.role==='projector';return `<div class="settings-heading"><h2 id="settings-title">Settings</h2>${betaBadge()}</div>
+ <section class="settings-section"><h3>View</h3><div class="settings-views">${[['projector','Projector','Audience lyrics'],['stage','Stage','Lyrics and chords'],['control','Control','Operate the slides']].map(([role,label,hint])=>`<button data-action="view" data-view="${role}" class="settings-view ${app.role===role?'selected':''}" aria-pressed="${app.role===role}"><span>${label}${role==='control'&&!canControl()?' '+icon('lock',12):''}</span><small>${hint}</small></button>`).join('')}</div></section>
+ <section class="settings-section"><h3>Display</h3><div class="settings-row"><span>Text size</span><div class="font-controls"><button class="small-icon" data-action="${projector?'projector-font-less':'font-less'}" aria-label="Smaller lyrics" ${(projector?app.projectorFont:app.font)===0?'disabled':''}>${icon('minus',18)}</button><span>Aa</span><button class="small-icon" data-action="${projector?'projector-font-more':'font-more'}" aria-label="Larger lyrics" ${(projector?app.projectorFont===4:app.font===2)?'disabled':''}>${icon('plus',18)}</button></div></div>${!projector?`<label class="settings-row toggle-label"><span>Show chords</span><input type="checkbox" id="chords-toggle" ${app.showChords?'checked':''}></label>`:`<button class="settings-link" data-action="fullscreen">${icon('fullscreen',17)} Fullscreen</button><p id="projector-overflow" class="projector-overflow" hidden>Lyrics exceed this screen. Reduce text size or add a --- slide break in the editor.</p>`}</section>
+ <section class="settings-section"><h3>Session</h3><div class="settings-row"><span>Code</span><strong class="settings-code">${escape(app.code)}</strong></div><p class="settings-connection">${escape(statusLabel())} · ${app.peers} connected</p>${app.role==='stage'?'<button class="settings-link" data-action="show-setlist">'+icon('list',17)+' Setlist</button>':''}<button class="settings-link" data-action="invite">${icon('link',17)} Invite team</button><details class="session-backups"><summary>Backups</summary><div class="settings-backups"><button class="settings-link" data-action="export">Export backup</button>${app.isHost?'<button class="settings-link" data-action="import">Import backup</button>':''}</div></details><button class="settings-link leave-session" data-action="leave">${icon('left',17)} ${app.screen==='demo'?'Leave demo':app.isHost?'End session':'Leave session'}</button></section>`;}
+
 function updateOrderPreview(){
   const form=$('#song-editor-form'),out=$('#order-preview');if(!form||!out)return;
   const sections=parseSongText(form.elements.source.value),order=form.elements.order.value;
@@ -240,8 +243,9 @@ function syntaxExamples(){
 }
 function modal(){if(app.showInvite && (app.screen==='session'||app.screen==='demo'))return inviteModal();
   if(!app.modal)return '';
-  const wrap=content=>`<div class="modal-backdrop" data-action="close-modal"><div class="modal-card" role="dialog" aria-modal="true" >${content}</div></div>`;
+  const wrap=content=>`<div class="modal-backdrop" data-action="close-modal"><div class="modal-card ${app.modal==='settings'?'settings-card':''}" role="dialog" aria-modal="true" ${app.modal==='settings'?'aria-labelledby="settings-title"':''}>${content}</div></div>`;
   const close=`<button class="icon-button close-modal" aria-label="Close" data-action="close-modal">${icon('close')}</button>`;
+  if(app.modal==='settings')return wrap(`${close}${settingsContent()}`);
   if(app.modal==='auth')return wrap(`${close}<span class="modal-symbol">${icon('lock',24)}</span><h2>Controller access</h2><p>Enter the session's Control password. Stage and Projector don't require it.</p><form id="reauth-form"><label>CONTROL PASSWORD</label><input type="password" name="password" autocomplete="off" required minlength="6"><button class="btn primary wide large" type="submit">Unlock Control</button></form>`);
   if(app.modal==='host-not-found')return wrap(`${close}<h2>${app.status==='sync-failed'?'Lyrics could not load':'Host not found'}</h2><p>${app.status==='sync-failed'?'The host connected, but the lyrics did not finish loading. Try again or reduce the host library size.':'Check the session code and keep the host device awake with Sync Lyrics open.'}</p><button class="btn primary wide" data-action="retry-connection">Try again</button><button class="btn outline wide" data-action="leave">Change session code</button>`);
   if(app.modal==='connect-failed')return wrap(`${close}<span class="modal-symbol">${icon('wifi',24)}</span><h2>Connection unavailable</h2><p>The signaling connection couldn't start. Check your internet connection and make sure the VDO.Ninja SDK isn't blocked.</p><button class="btn primary wide" data-action="leave">Return home</button>`);
@@ -262,7 +266,8 @@ function render(){
   const isPerformance=(app.screen==='session'||app.screen==='demo');
   const keepScroll=app.tab==='lyrics' && app.role!=='projector' && !app.follow ? ($('.lyrics-scroll')?.scrollTop??app.scrollTop):0;
   const modalKey=isPerformance?(app.showInvite?'invite':app.modal):'';
-  const held=modalKey&&modalKey===renderedModalKey?$('.modal-backdrop'):null;
+  const held=modalKey&&modalKey!=='settings'&&modalKey===renderedModalKey?$('.modal-backdrop'):null;
+  const settingsFocus=modalKey==='settings'&&renderedModalKey==='settings'?document.activeElement?.getAttribute('data-action'):null;
   const focused=held?.contains(document.activeElement)?document.activeElement:null;
   const selection=focused&&typeof focused.selectionStart==='number'?[focused.selectionStart,focused.selectionEnd]:null;
   if(held)held.remove();
@@ -274,6 +279,7 @@ function render(){
   }else el.innerHTML= app.screen==='welcome'?welcome():app.screen==='create'?createView():app.screen==='join'?joinView():app.role==='projector'?projectorScreen():stageScreen();
   if(held){el.appendChild(held);focused?.focus({preventScroll:true});if(selection)focused.setSelectionRange(...selection);}
   else if(isPerformance)el.insertAdjacentHTML('beforeend',modal());
+  if(modalKey==='settings'){const focusTarget=settingsFocus?document.querySelector('.settings-card [data-action="'+settingsFocus+'"]'):$('.settings-card .close-modal');focusTarget?.focus({preventScroll:true});}
   renderedModalKey=modalKey;
   if(app.role==='projector')requestAnimationFrame(checkProjectorFit);
   if(app.modal==='song-editor')updateOrderPreview();
@@ -299,19 +305,19 @@ async function handleAction(btn){
   if(action==='preview'){await preview();}
   if(action==='close-modal'){app.modal='';render();}
   if(action==='close-invite'){app.showInvite=false;render();}
-  if(action==='invite'){app.showInvite=true;render();}
+  if(action==='settings'){app.showInvite=false;app.modal='settings';render();}
+  if(action==='show-setlist'){app.modal='';app.tab='setlist';render();}
+  if(action==='invite'){app.modal='';app.showInvite=true;render();}
   if(action==='view'){jumpLocal(btn.dataset.view);}
   if(action==='tab'){app.tab=btn.dataset.tab;app.follow=true;app.scrollTop=0;render();}
   if(action==='chords-toggle'){app.showChords=!app.showChords;render();}
-  if(action==='reading-options'){app.showReadingOptions=!app.showReadingOptions;render();}
   if(action==='font-less'){app.font=Math.max(0,app.font-1);render();}
   if(action==='font-more'){app.font=Math.min(2,app.font+1);render();}
   if(action==='retry-connection'){app.modal='';if(app.peer){app.peer.resetHost();app.peer.send({kind:'hello'});}render();return;}
   if(action==='projector-font-less'){app.projectorFont=Math.max(0,app.projectorFont-1);render();}
   if(action==='projector-font-more'){app.projectorFont=Math.min(4,app.projectorFont+1);render();}
-  if(action==='projection-options'){app.showProjectorTools=!app.showProjectorTools;render();}
   if(action==='projector-return'){if(app.isHost||app.authorized)jumpLocal('control');else jumpLocal('stage');}
-  if(action==='fullscreen'){const el=$('#projector-shell');if(document.fullscreenElement)await document.exitFullscreen();else await el?.requestFullscreen?.();}
+  if(action==='fullscreen'){const el=document.documentElement;if(document.fullscreenElement)await document.exitFullscreen();else await el?.requestFullscreen?.();}
   if(action==='back')await dispatch({kind:'step',dir:-1});
   if(action==='next')await dispatch({kind:'step',dir:1});
   if(action==='blank')await dispatch({kind:'blank',value:!app.data.blank});
@@ -322,7 +328,7 @@ async function handleAction(btn){
   if(action==='take-set-live'){await dispatch({kind:'activate-set',id:editingSet().id});app.editingSet=false;app.tab='lyrics';render();}
   if(action==='new-set'){app.modal='create-set';render();}
   if(action==='rename-set'){app.modal='rename-set';render();}
-  if(action==='open-library'){app.modal='library';render();}
+  if(action==='open-library'){if(!app.editingSet)app.editSetId=app.data.activeSetId;app.modal='library';render();}
   if(action==='new-song'){app.editor=null;app.modal='song-editor';render();}
   if(action==='edit-song'){app.editor=app.data.library.find(x=>x.id===btn.dataset.id);app.modal='song-editor';render();}
   if(action==='add-song'){await dispatch({kind:'add-to-set',setId:editingSet().id,id:btn.dataset.id});toast('Added to setlist.');}
@@ -380,9 +386,10 @@ document.addEventListener('submit',async e=>{
   }catch(error){toast(error.message||'Could not continue.');}
 });
 document.addEventListener('keydown',async e=>{
-  const editable=e.target.closest('input,textarea,select,[contenteditable="true"]');
-  if(e.key==='Escape'&&(app.modal||app.showInvite)){app.modal='';app.showInvite=false;render();return;}
-  if(editable||!app.data||app.modal||app.showInvite||!canControl()||(app.screen!=='session'&&app.screen!=='demo'))return;
+  const editable=e.target.closest?.('input,textarea,select,[contenteditable="true"]');
+  if(e.key==='Escape'&&(app.modal||app.showInvite)){app.modal='';app.showInvite=false;render();$('.settings-trigger,.projection-gear')?.focus();return;}
+  if(e.key==='Tab'&&(app.modal||app.showInvite)){const dialog=$('.modal-card'),items=dialog?[...dialog.querySelectorAll('button:not(:disabled),input:not([type=hidden]),select,textarea,a[href],summary')].filter(el=>!el.closest('[hidden]')&&(!el.closest('details')||el.closest('details').open||el.tagName==='SUMMARY')):[];if(items.length){const first=items[0],last=items.at(-1);if(e.shiftKey&&(document.activeElement===first||!dialog.contains(document.activeElement))){e.preventDefault();last.focus();}else if(!e.shiftKey&&(document.activeElement===last||!dialog.contains(document.activeElement))){e.preventDefault();first.focus();}}return;}
+  if(editable||!app.data||app.modal||app.showInvite||!canControl()||app.role!=='control'||(app.screen!=='session'&&app.screen!=='demo'))return;
   try {
   if(e.key==='ArrowRight'||e.key==='ArrowDown'){e.preventDefault();await dispatch({kind:'step',dir:1});}
   if(e.key==='ArrowLeft'||e.key==='ArrowUp'){e.preventDefault();await dispatch({kind:'step',dir:-1});}
@@ -423,4 +430,5 @@ if(params.get('demo')==='1') preview();
 else render();
 // Projector deep links auto-join without an extra role selection step.
 if(app.screen==='join' && ['projector','stage'].includes(app.pendingView))startSession({host:false,code:app.pendingCode,password:'',role:app.pendingView});
+
 

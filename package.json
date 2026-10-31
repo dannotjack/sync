@@ -1,6 +1,6 @@
 {
   "name": "sync-lyrics",
-  "version": "1.0.0-beta.11",
+  "version": "1.0.0-beta.12",
   "private": true,
   "type": "module",
   "description": "Static browser-to-browser lyrics and chords projector",
@@ -12,3 +12,4 @@
     "jsdom": "^30.1.3"
   }
 }
+

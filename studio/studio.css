@@ -42,3 +42,6 @@
 button:focus-visible{outline:2px solid #f0d66b;outline-offset:2px}
 @media(max-width:1150px){.mobile-panes{display:flex;gap:8px;padding:10px 12px;position:sticky;top:0;z-index:2;background:#101112}.mobile-panes button[data-action="pane-songs"]{display:none}.shell[data-mobile-pane="preview"] .editor-panel{display:none}.shell:not([data-mobile-pane="preview"]) .preview-panel{display:none}.shell[data-mobile-pane="preview"] .preview-panel{grid-row:1;grid-column:2;min-width:0}.preview-panel{min-width:0}}
 @media(max-width:740px){.mobile-panes button[data-action="pane-songs"]{display:block}.mobile-panes button{flex:1}.shell[data-mobile-pane="songs"] .editor-panel,.shell[data-mobile-pane="songs"] .preview-panel,.shell:not([data-mobile-pane="songs"]) .library-panel{display:none}.shell[data-mobile-pane="editor"] .preview-panel,.shell[data-mobile-pane="preview"] .editor-panel{display:none}.shell[data-mobile-pane="songs"] .library-panel{display:flex}.tabs{flex-wrap:wrap}.tabs [data-save-status]{flex-basis:100%}.songlist{max-height:60dvh}.top-actions{width:100%}.top-actions button{flex:1}#source{min-height:45dvh}}
+
+
+.studio-beta{font-size:10px;font-weight:650;letter-spacing:.05em;text-transform:uppercase;color:#f0d66b;border:1px solid #645a32;border-radius:5px;padding:3px 6px;vertical-align:middle}

@@ -152,3 +152,8 @@ Build My Life remains the starter demo. Its prepared version now loads from the 
 
 
 Studio uses explicit Merge / Replace / Cancel actions for master imports, validates backups before replacing work, and limits local sets to 120 songs. Master and set JSON exports are checked against the 2 MB import limit; Studio backups use an 8 MB limit. Export details distinguish downloaded songs from linked catalogue titles and preserve published source references. On smaller screens, switch between Songs, Editor and Preview. Projector previews use a 16:9 frame and warn about overflow; only `---` creates a slide break. Live devices show Loading lyrics until a full snapshot arrives, with retry guidance for missing hosts.
+
+
+## Beta interface
+
+The homepage, session header and Studio identify this release as Beta. Choose Projector, Stage or Control when joining; after joining, switch views from **Settings → View**. Control has **Setlist** and **Live song** tabs with permanent Back / Next / Blank controls. Stage focuses on the current song, with surrounding sections dimmed. Text size, chord visibility, invitation links, session code and backups live in Settings. Projector keeps the audience slide clear; its Beta label and view controls appear in Settings. Stage keyboard navigation does not change the live presentation.
